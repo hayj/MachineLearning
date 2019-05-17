@@ -27,11 +27,23 @@ from machinelearning.seeder import *
 from machinelearning.eval import *
 
 
-def bestDummyScore(*args, **kwargs):
-	bestScore = -10000
-	for key, value in dummyScores(*args, **kwargs).items():
-		if value["score"] > bestScore:
-			bestScore = value["score"]
+def bestDummyScore(y, metric, *args, **kwargs):
+	bestScore = None
+	results = dummyScores(y, *args, **kwargs)
+	assert len(results) > 0
+	foundMetric = None
+	for strategy, infos in results.items():
+		for key, value in infos.items():
+			if isinstance(value, dict) and "score" in value and metric in key:
+				foundMetric = key
+		break
+	assert foundMetric is not None
+	for strategy, infos in results.items():
+		for key, value in infos.items():
+			if key == foundMetric:
+				if bestScore is None or value["score"] > bestScore:
+					bestScore = value["score"]
+	assert bestScore is not None
 	return bestScore
 
 def dummyScores\
@@ -85,4 +97,4 @@ if __name__ == '__main__':
 	labels = list([1, 1, 1, 2, 3, 4] * 30)
 	# print(labels)
 	printLTS(dummyScores(labels))
-	# print(bestDummyScore(labels))
+	print(bestDummyScore(labels, "f1_mac"))

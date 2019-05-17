@@ -55,6 +55,8 @@ def crossValidate\
 		The default strategies for classiication is ['uniform', 'most_frequent', 'stratified']
 		The default DummyModel for classiication is sklearn.dummy.DummyClassifier
 	"""
+	if not addMean and removeLists:
+		raise Exeption("You cannot have no score")
 	if isRegression is None:
 		isRegression = isinstance(y[0], float)
 	if scoring is None:
@@ -69,14 +71,19 @@ def crossValidate\
 			scoreKeys.append(("test_" + current, current))
 	for scoreKey, token in scoreKeys:
 		if scoreKey in result:
-			result[token + "s"] = result[scoreKey]
-			del result[scoreKey]
+			currentResult = dict()
+			if not removeLists:
+				currentResult["scores"] = result[scoreKey]
 			if addMean:
-				result[token] = result[token + "s"].mean()
+				currentResult["score"] = result[scoreKey].mean()
 			if addConfidence:
-				result[token + "_confidence"] = result[token + "s"].std() * 2
-			if removeLists:
-				del result[token + "s"]
+				currentResult["confidence"] = result[scoreKey].std() * 2
+			if decimals is not None and isinstance(decimals, int) and decimals >= 1:
+				currentResult["score"] = np.around(currentResult["score"], decimals=decimals)
+				if "confidence" in currentResult:
+					currentResult["confidence"] = np.around(currentResult["confidence"], decimals=decimals)
+			result[token] = currentResult
+			del result[scoreKey]
 
 
 	result['fit_times'] = result['fit_time']
