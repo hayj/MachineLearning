@@ -25,8 +25,10 @@ More explanations :
 """
 
 from systemtools.basics import *
+from systemtools.logger import *
 import numpy as np
 from sklearn.model_selection import cross_validate
+from sklearn.model_selection import KFold
 
 
 def crossValidate\
@@ -35,36 +37,54 @@ def crossValidate\
 	X,
 	y,
 	*args,
-	scoring=None,
+	scoring=None, # If None, the estimator’s score method is used, you can use ['accuracy', 'f1_macro'] # 'precision_macro', 'recall_macro'
 	isRegression=None,
 	addTime=False,
 	addMean=True,
 	addConfidence=True,
 	addExtraConfidence=False,
 	removeLists=True,
-	cv=10,
 	n_jobs=-1,
 	decimals=5,
 	return_train_score=False,
-	verbose=False,
+
+	cv=5,
+	shuffle=True,
+	random_state=0,
+
+	verbose=True,
 	logger=None,
 	**kwargs,
 ):
 	"""
-		This function return a dict containing cross validation scores, times etc.
+		This function return a dict containing cross validation scores, times, 95% confidence etc.
 		The default strategies for classiication is ['uniform', 'most_frequent', 'stratified']
 		The default DummyModel for classiication is sklearn.dummy.DummyClassifier
+		For scoring, if None, the estimator’s score method is used, you can use ['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'] etc.
 	"""
+
 	if not addMean and removeLists:
 		raise Exeption("You cannot have no score")
 	if isRegression is None:
 		isRegression = isinstance(y[0], float)
 	if scoring is None:
-		if isRegression:
-			scoring = None
-		else:
-			scoring = ['accuracy', 'f1_macro'] # 'precision_macro', 'recall_macro'
-	result = cross_validate(model, X, y, *args, scoring=scoring, cv=cv, n_jobs=n_jobs, return_train_score=return_train_score, **kwargs)
+		log("The scoring methods will be: " + str(model.score), logger, verbose=verbose)
+	else:
+		log("The scoring methods will be: " + str(scoring), logger, verbose=verbose)
+	# if scoring is None:
+	# 	if isRegression:
+	# 		scoring = None
+	# 	else:
+	# 		scoring = ['accuracy', 'f1_macro'] # 'precision_macro', 'recall_macro'
+	# elif not isinstance(scoring, list):
+	# 	scoring = [scoring]
+	if isinstance(cv, int):
+		kfold = KFold(n_splits=cv, shuffle=shuffle, random_state=random_state)
+	else:
+		kfold = cv
+	if isinstance(scoring, str):
+		scoring = [scoring]
+	result = cross_validate(model, X, y, *args, cv=kfold, scoring=scoring, n_jobs=n_jobs, return_train_score=return_train_score, **kwargs)
 	scoreKeys = [("test_score", "score")]
 	if scoring is not None:
 		for current in scoring:
@@ -84,8 +104,6 @@ def crossValidate\
 					currentResult["confidence"] = np.around(currentResult["confidence"], decimals=decimals)
 			result[token] = currentResult
 			del result[scoreKey]
-
-
 	result['fit_times'] = result['fit_time']
 	result['score_times'] = result['score_time']
 	if "train_score" in result:
@@ -117,6 +135,7 @@ def crossValidate\
 			if isinstance(result[key], float):
 				result[key] = np.around(result[key], decimals=decimals)
 	return result
+
 
 if __name__ == '__main__':
 	from sklearn import datasets, linear_model

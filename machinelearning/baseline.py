@@ -27,20 +27,30 @@ from machinelearning.seeder import *
 from machinelearning.eval import *
 
 
-def bestDummyScore(y, metric, *args, **kwargs):
+def bestDummyScore(y, scoring=None, *args, logger=None, verbose=True, **kwargs):
+	if scoring is None:
+		scoring = "accuracy"
+		logWarning("We will use " + str(scoring) + " as the default scoring funct", logger, verbose=verbose)
 	bestScore = None
-	results = dummyScores(y, *args, **kwargs)
+	results = dummyScores(y, *args, scoring=scoring, logger=logger, verbose=verbose, **kwargs)
 	assert len(results) > 0
 	foundMetric = None
+	if scoring is None:
+		foundMetric = None
+	else:
+		if isinstance(scoring, list):
+			metric = scoring[0]
+		else:
+			metric = scoring
+		for strategy, infos in results.items():
+			for key, value in infos.items():
+				if isinstance(value, dict) and "score" in value and metric in key:
+					foundMetric = key
+			break
+		assert foundMetric is not None
 	for strategy, infos in results.items():
 		for key, value in infos.items():
-			if isinstance(value, dict) and "score" in value and metric in key:
-				foundMetric = key
-		break
-	assert foundMetric is not None
-	for strategy, infos in results.items():
-		for key, value in infos.items():
-			if key == foundMetric:
+			if foundMetric is None or key == foundMetric:
 				if bestScore is None or value["score"] > bestScore:
 					bestScore = value["score"]
 	assert bestScore is not None
@@ -50,11 +60,12 @@ def dummyScores\
 (
 	y,
 	*args,
+	scoring=None,
 	isRegression=None,
 	DummyModel=None,
 	strategies=None,
 	evalFunct=crossValidate,
-	verbose=False,
+	verbose=True,
 	logger=None,
 	**kwargs,
 ):
@@ -63,6 +74,9 @@ def dummyScores\
 		The default strategies for classiication is ['uniform', 'most_frequent', 'stratified']
 		The default DummyModel for classiication is sklearn.dummy.DummyClassifier
 	"""
+	if scoring is None:
+		scoring = "accuracy"
+		logWarning("We will use " + str(scoring) + " as the default scoring funct", logger, verbose=verbose)
 	if isRegression is None:
 		isRegression = isinstance(y[0], float)
 	regressionErrorMessage = "Regression not yet implemented"
@@ -82,7 +96,7 @@ def dummyScores\
 	result = dict()
 	for strategy in strategies:
 		clf = DummyModel(strategy=strategy)
-		currentResult = evalFunct(clf, X, y, *args, **kwargs)
+		currentResult = evalFunct(clf, X, y, *args, logger=logger, verbose=verbose, scoring=scoring, **kwargs)
 		result[strategy] = currentResult
 	# if verbose:
 	# 	log(lts(result), logger, verbose=verbose)
@@ -90,11 +104,12 @@ def dummyScores\
 
 
 if __name__ == '__main__':
-	seed()
-	labels = np.array(["a", "a", "a", "a", "a", "a", "b", "b", "b", "c"] * 30)
-	labels = np.array([1, 1, 1, 1, 1, 1, 2, 3] * 30)
-	labels = list([1, 1, 1, 1, 1, 1, 2, 3] * 30)
-	labels = list([1, 1, 1, 2, 3, 4] * 30)
-	# print(labels)
-	printLTS(dummyScores(labels))
-	print(bestDummyScore(labels, "f1_mac"))
+	for i in range(1):
+		seed(i)
+		labels = np.array([1, 1, 1, 1, 1, 1, 2, 3] * 30)
+		labels = list([1, 1, 1, 1, 1, 1, 2, 3] * 30)
+		labels = list([1, 5, 6, 2, 3, 4] * 30)
+		labels = np.array(["a", "b", "c"] * 30)
+		# print(labels)
+		# printLTS(dummyScores(labels))
+		print(bestDummyScore(labels))
