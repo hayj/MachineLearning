@@ -1,5 +1,6 @@
 from keras.utils import multi_gpu_model
 from keras import backend
+from systemtools.logger import *
 
 def toMultiGPU(model, logger=None, verbose=True):
 	try:
