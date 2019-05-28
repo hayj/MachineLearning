@@ -36,10 +36,10 @@ class ConsistentIterator:
         subProcessParseFunct which must do the maximum of data preprocessing because it works in sub processes
         (take care of data serialization (= duplication in each process) --> memory usage)
         it have to return values (not yield)
-        mainProcessParseFunct take the output of subProcessParseFunct and return values
+        mainProcessParseFunct take the output of subProcessParseFunct and return values, it works on the main unique python process, so it can be usefull when you cannot pass object across process (which mean the object is not serializable) or the object you want to pass is too big to be duplicated on each subprocess...
         take care of defining your callbacks with *args and **kwargs...
         See an example in machinelearning.test.iteratortest
-        You can wrap the iterator in AgainAndAgain
+        You can wrap an instance of ConsistentIterator in AgainAndAgain, so your iterator can be restarted again and again...
     """
     def __init__\
     (
