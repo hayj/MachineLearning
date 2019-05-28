@@ -37,9 +37,10 @@ class ConsistentIterator:
         (take care of data serialization (= duplication in each process) --> memory usage)
         it have to return values (not yield)
         mainProcessParseFunct take the output of subProcessParseFunct and return values, it works on the main unique python process, so it can be usefull when you cannot pass object across process (which mean the object is not serializable) or the object you want to pass is too big to be duplicated on each subprocess...
-        take care of defining your callbacks with *args and **kwargs...
+        take care of defining your callbacks with *args and **kwargs to avoid errors...
         See an example in machinelearning.test.iteratortest
         You can wrap an instance of ConsistentIterator in AgainAndAgain, so your iterator can be restarted again and again...
+        TODO merge itemGenerator and subProcessParseFunct
     """
     def __init__\
     (
@@ -217,3 +218,12 @@ class InfiniteBatcher:
             return tuple(data)
         else:
             return data
+
+
+
+
+
+
+
+
+
