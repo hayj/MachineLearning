@@ -160,7 +160,7 @@ class ConsistentIterator:
 class InfiniteBatcher:
     """
         This class take an AgainAndAgain iterator and yield batch samples
-        An AgainAndAgain iterator is an iterator that calling `iter(instance)` of `for i in instance`
+        An AgainAndAgain iterator is an iterator that calling `iter(instance)` or `for i in instance`
         will produce a new fresh iterator to be able to iterate again and again...
         Each tuple which is yield by the iterator given will be transformed in batchs.
         It means instead of return (a, b) then (c, d) then (e, f) (from the AgainAndAgain instance)
