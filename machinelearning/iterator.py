@@ -165,6 +165,7 @@ class InfiniteBatcher:
         Each tuple which is yield by the iterator given will be transformed in batchs.
         It means instead of return (a, b) then (c, d) then (e, f) (from the AgainAndAgain instance)
         it wil return, for a bacth size of 2, ([a, c], [b, d]) then ([e], [f]) then ([a, c], [b, d]) then ([e], [f]) etc infinitely without StopIteration, which mean without the need to call `for i in instance` several time.
+        To pass an InfiniteBatcher to keras `fit_generator` you must first count the number of samples and call `history = model.fit_generator(myInfiniteBatcher, steps_per_epoch=math.ceil(trainSamplesCount / myInfiniteBatcher.batchSize)` 
 
     """
     def __init__(self, againAndAgainIterator, batchSize, toNumpyArray=True, logger=None, verbose=True):
