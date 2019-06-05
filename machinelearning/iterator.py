@@ -12,13 +12,13 @@ import numpy as np
 TERMINATED_TOKEN = "__TERMINATED__"
 NO_RESULT_TOKEN = "__NO_RESULT__"
 
-def itemGeneratorWrapper(container, itemGenerator, subProcessParseFunct, subProcessParseFunctArgs, subProcessParseFunctKwargs, itemQueue, verbose=False, name=None):
+def itemGeneratorWrapper(container, itemGenerator, itemGeneratorArgs, itemGeneratorKwargs, subProcessParseFunct, subProcessParseFunctArgs, subProcessParseFunctKwargs, itemQueue, verbose=False, name=None):
     logger = None
     if verbose:
         if name is None:
             name = getRandomStr()
         logger = Logger(name + ".log")
-    for current in itemGenerator(container, logger=logger, verbose=verbose):
+    for current in itemGenerator(container, *itemGeneratorArgs, **itemGeneratorKwargs, logger=logger, verbose=verbose):
         if subProcessParseFunct is not None:
             current = subProcessParseFunct(current, *subProcessParseFunctArgs, **subProcessParseFunctKwargs, logger=logger, verbose=verbose)
         itemQueue.put(current)
@@ -47,6 +47,8 @@ class ConsistentIterator:
         self,
         containers,
         itemGenerator,
+        itemGeneratorArgs=None,
+        itemGeneratorKwargs=None,
         subProcessParseFunct=None,
         subProcessParseFunctArgs=None,
         subProcessParseFunctKwargs=None,
@@ -63,6 +65,8 @@ class ConsistentIterator:
     ):
         self.containers = containers
         self.itemGenerator = itemGenerator
+        self.itemGeneratorArgs = itemGeneratorArgs or ()
+        self.itemGeneratorKwargs = itemGeneratorKwargs or dict()
         self.subProcessParseFunct = subProcessParseFunct
         self.subProcessParseFunctArgs = subProcessParseFunctArgs or ()
         self.subProcessParseFunctKwargs = subProcessParseFunctKwargs or dict()
@@ -117,7 +121,7 @@ class ConsistentIterator:
                             self.processes[i] = Process\
                             (
                                 target=itemGeneratorWrapper,
-                                args=(container, self.itemGenerator, self.subProcessParseFunct, self.subProcessParseFunctArgs, self.subProcessParseFunctKwargs, self.queues[i],),
+                                args=(container, self.itemGenerator, self.itemGeneratorArgs, self.itemGeneratorKwargs, self.subProcessParseFunct, self.subProcessParseFunctArgs, self.subProcessParseFunctKwargs, self.queues[i],),
                                 kwargs={"verbose": self.subProcessesVerbose, "name": None}
                             )
                             self.processes[i].start()
