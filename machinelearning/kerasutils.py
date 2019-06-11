@@ -198,7 +198,7 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 						plt.ylabel('Score')
 						plt.xlabel('Epoch')
 						plt.legend(legend, loc='upper left')
-						plt.savefig(graphDir + "/" + key + ".png")
+						plt.savefig(graphDir + "/" + key + ".png", format='png')
 						plt.figure()
 				except Exception as e:
 					logException(e, self)

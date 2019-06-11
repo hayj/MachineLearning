@@ -223,11 +223,3 @@ class InfiniteBatcher:
         else:
             return data
 
-
-
-
-
-
-
-
-
