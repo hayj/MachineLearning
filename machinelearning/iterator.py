@@ -5,8 +5,10 @@ from datastructuretools.processing import *
 from datatools.jsonutils import *
 import random
 from multiprocessing import cpu_count, Process, Pipe, Queue, JoinableQueue
+# from multiprocessing import Lock as MPLock
 import queue
 import numpy as np
+from threading import Lock as TLock
 
 
 TERMINATED_TOKEN = "__TERMINATED__"
@@ -24,6 +26,7 @@ def itemGeneratorWrapper(container, itemGenerator, itemGeneratorArgs, itemGenera
         itemQueue.put(current)
     itemQueue.put(TERMINATED_TOKEN)
     itemQueue.close()
+
 
 class ConsistentIterator:
     """
@@ -91,6 +94,8 @@ class ConsistentIterator:
         self.queues = [None] * self.parallelProcesses
         self.currentIndex = 0
         self.containersQueue = queue.Queue() # WARNING, don't use the processing Queue but queue.Queue because the procesing queue `put` method is async...
+        self.tlock = TLock()
+        # self.mplock = MPLock()
         for c in self.containers:
             self.containersQueue.put(c)
 
@@ -99,65 +104,72 @@ class ConsistentIterator:
 
     def __next__(self):
         result = NO_RESULT_TOKEN
-        while isinstance(result, type(NO_RESULT_TOKEN)) and result == NO_RESULT_TOKEN:
-            if self.processes[self.currentIndex] is None and self.containersQueue.qsize() > 0:
-                # First we find an element which is not None (if exists):
-                self.currentIndex = None
-                for i in range(len(self.processes)):
-                    if self.processes[i] is not None:
-                        self.currentIndex = i
-                        break
-                # Then we fill all None in processes:
-                try:
+        doRaise = False
+        with self.tlock:
+            # with self.mplock:
+            while isinstance(result, type(NO_RESULT_TOKEN)) and result == NO_RESULT_TOKEN:
+                if self.processes[self.currentIndex] is None and self.containersQueue.qsize() > 0:
+                    # First we find an element which is not None (if exists):
+                    self.currentIndex = None
                     for i in range(len(self.processes)):
-                        # print(i)
-                        if self.processes[i] is None:
-                            # time.sleep(1)
-                            container = self.containersQueue.get(block=False)
-                            # We take the first we insert as the self.currentIndex:
-                            if self.currentIndex is None:
-                                self.currentIndex = i
-                            self.queues[i] = Queue(self.queuesMaxSize)
-                            self.processes[i] = Process\
-                            (
-                                target=itemGeneratorWrapper,
-                                args=(container, self.itemGenerator, self.itemGeneratorArgs, self.itemGeneratorKwargs, self.subProcessParseFunct, self.subProcessParseFunctArgs, self.subProcessParseFunctKwargs, self.queues[i],),
-                                kwargs={"verbose": self.subProcessesVerbose, "name": None}
-                            )
-                            self.processes[i].start()
-                except queue.Empty as e:
-                    pass
-            # If we have no more process, we can break:
-            allAreNone = True
-            for current in self.processes:
-                if current is not None:
-                    allAreNone = False
+                        if self.processes[i] is not None:
+                            self.currentIndex = i
+                            break
+                    # Then we fill all None in processes:
+                    try:
+                        for i in range(len(self.processes)):
+                            # print(i)
+                            if self.processes[i] is None:
+                                # time.sleep(1)
+                                container = self.containersQueue.get(block=False)
+                                # We take the first we insert as the self.currentIndex:
+                                if self.currentIndex is None:
+                                    self.currentIndex = i
+                                self.queues[i] = Queue(self.queuesMaxSize)
+                                self.processes[i] = Process\
+                                (
+                                    target=itemGeneratorWrapper,
+                                    args=(container, self.itemGenerator, self.itemGeneratorArgs, self.itemGeneratorKwargs, self.subProcessParseFunct, self.subProcessParseFunctArgs, self.subProcessParseFunctKwargs, self.queues[i],),
+                                    kwargs={"verbose": self.subProcessesVerbose, "name": None}
+                                )
+                                self.processes[i].start()
+                    except queue.Empty as e:
+                        pass
+                # If we have no more process, we can break:
+                allAreNone = True
+                for current in self.processes:
+                    if current is not None:
+                        allAreNone = False
+                        break
+                if allAreNone:
+                    doRaise = True
                     break
-            if allAreNone:
-                raise StopIteration
-            # We get the current process and queue:
-            currentProcess = self.processes[self.currentIndex]
-            currentQueue = self.queues[self.currentIndex]
-            if currentQueue is not None:
-                # We get the next element:
-                try:
-                    current = currentQueue.get()
-                    if isinstance(current, type(TERMINATED_TOKEN)) and current == TERMINATED_TOKEN:
-                        raise queue.Empty
-                    # if self.currentIndex == 1: print("a")
-                    if self.mainProcessParseFunct is not None:
-                        current = self.mainProcessParseFunct(current, *self.mainProcessParseFunctArgs, **self.mainProcessParseFunctKwargs, logger=self.logger, verbose=self.verbose)
-                    result = current
-                except queue.Empty:
-                    # We remove the current process and queue if there are no more items:
-                    currentProcess.join()
-                    self.processes[self.currentIndex] = None
-                    self.queues[self.currentIndex] = None
-                    self.pbar.tic()
-            # We go to the next process:
-            self.currentIndex += 1
-            if self.currentIndex == len(self.processes):
-                self.currentIndex = 0
+                # We get the current process and queue:
+                currentProcess = self.processes[self.currentIndex]
+                currentQueue = self.queues[self.currentIndex]
+                if currentQueue is not None:
+                    # We get the next element:
+                    try:
+                        current = currentQueue.get()
+                        if isinstance(current, type(TERMINATED_TOKEN)) and current == TERMINATED_TOKEN:
+                            raise queue.Empty
+                        # if self.currentIndex == 1: print("a")
+                        if self.mainProcessParseFunct is not None:
+                            current = self.mainProcessParseFunct(current, *self.mainProcessParseFunctArgs, **self.mainProcessParseFunctKwargs, logger=self.logger, verbose=self.verbose)
+                        result = current
+                    except queue.Empty:
+                        # We remove the current process and queue if there are no more items:
+                        currentProcess.join()
+                        self.processes[self.currentIndex] = None
+                        self.queues[self.currentIndex] = None
+                        self.pbar.tic()
+                # We go to the next process:
+                self.currentIndex += 1
+                if self.currentIndex == len(self.processes):
+                    self.currentIndex = 0
+        # We check if we have to raise:
+        if doRaise:
+            raise StopIteration
         # We return the result:
         return result
 
@@ -181,6 +193,7 @@ class InfiniteBatcher:
         self.logger = logger
         self.verbose = verbose
         self.currentGenerator = None
+        
     def __iter__(self):
         return self
     def __next__(self):
