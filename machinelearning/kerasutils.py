@@ -25,10 +25,6 @@ from systemtools.location import *
 from systemtools.system import *
 from systemtools.logger import *
 from datatools.jsonutils import *
-try:
-	import matplotlib.pyplot as plt
-except Exception as e:
-	print(e)
 from machinelearning.utils import *
 from machinelearning.iterator import *
 
@@ -49,6 +45,8 @@ def toMultiGPU(model, logger=None, verbose=True):
 
 
 def iteratorToArray(it, steps=None):
+	if it is None:
+		return None
 	newVal = None
 	if isinstance(it, InfiniteBatcher):
 		batchs = []
@@ -66,6 +64,13 @@ def iteratorToArray(it, steps=None):
 			newVal.append(current)
 		newVal = np.array(newVal)
 	return newVal
+
+AUTO_MODES = \
+{
+	'val_loss': 'min',
+	'val_acc': 'max',
+	'val_top_k_categorical_accuracy': 'max',
+}
 
 class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master/keras/callbacks.py#L614
 	def __init__\
@@ -91,10 +96,24 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		saveMetrics={"val_loss": "min", "val_acc": "max",},
 		stopFile=None,
 		historyFile=None,
+		earlyStopMonitor=None,
 	):
 		"""
 			xVal and yVal can be an InfiniteBatcher instance (see machinelearing.iterator.InfiniteBatcher) or any iterable (np arrays, list, generator, machinelearing.iterator.ConsistentIterator...)
+
+			Example of earlyStopMonitor:
+			{
+				'val_loss': {'patience': 50, 'min_delta': 0, 'mode': 'min'},
+				'val_acc': {'patience': 50, 'min_delta': 0.05, 'mode': 'max'},
+				'val_top_k_categorical_accuracy': {'patience': 50, 'min_delta': 0, 'mode': 'auto'},
+			}
+			You have to give at least a patience for each 
 		"""
+		self.logger = logger
+		self.verbose = verbose
+		self.earlyStopMonitor = earlyStopMonitor
+		normalizeEarlyStopMonitor(self.earlyStopMonitor,
+				logger=self.logger, verbose=self.verbose)
 		assert not isinstance(xVal, InfiniteBatcher) or steps is not None
 		self.historyFile = historyFile
 		self.stopFile = stopFile
@@ -104,8 +123,6 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		self.steps = steps
 		self.xVal = iteratorToArray(self.xVal, steps=self.steps)
 		self.yVal = iteratorToArray(self.yVal, steps=self.steps)
-		self.logger = logger
-		self.verbose = verbose
 		self.metricsFreq = metricsFreq
 		self.metrics = metrics
 		if self.metrics is None:
@@ -181,6 +198,7 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 			for key in self.epochs.keys():
 				if key.startswith("val"):
 					keys.append(key)
+			import matplotlib.pyplot as plt
 			# We plot all:
 			for key in keys:
 				try:
@@ -202,11 +220,13 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 						plt.figure()
 				except Exception as e:
 					logException(e, self)
-			if self.doPltShow:
-				try:
+			try:
+				if self.doPltShow:
 					plt.show()
-				except Exception as e:
-					logException(e, self)
+				else:
+					plt.close()
+			except Exception as e:
+				logException(e, self)
 		except Exception as e:
 			logException(e, self)
 	
@@ -276,5 +296,67 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		if self.stopFile is not None and isFile(self.stopFile):
 			self.model.stop_training = True
 			log("We stop training because we found " + self.stopFile, self)
+		if self.earlyStopMonitor is not None and len(self.earlyStopMonitor) > 0:
+			esm = normalizeEarlyStopMonitor(self.earlyStopMonitor,
+				logger=self.logger, verbose=self.verbose)
+			if hasToEarlyStop(self.history, esm,
+				logger=self.logger, verbose=self.verbose):
+				self.model.stop_training = True
+				log("We early stop.", self)
 		self.tt.tic("on_epoch_end done")
 		self.tt.toc()
+
+
+def normalizeEarlyStopMonitor(earlyStopMonitor, logger=None, verbose=True):
+	esm = dict()
+	for monitor in earlyStopMonitor.keys():
+		current = earlyStopMonitor[monitor]
+		if not dictContains(current, "patience"):
+			raise Exception(monitor + " has no patience")
+		if not dictContains(current, "mode") or current["mode"] == 'auto':
+			if monitor in AUTO_MODES:
+				current["mode"] = AUTO_MODES[monitor]
+			else:
+				raise Exception("Please provide a mode for " + monitor)
+		if not dictContains(current, "min_delta"):
+			current["min_delta"] = 0.0
+		if current["min_delta"] < 0.0:
+			raise Exception("min_delta of " + monitor + " must be greater or equal that 0.0")
+		esm[monitor] = current
+		if monitor in AUTO_MODES and current["mode"] != AUTO_MODES[monitor]:
+			logError(monitor + " mode inconsistent... Found " + AUTO_MODES[monitor] + " but got " + current["mode"], logger=logger, verbose=verbose)
+	return esm
+
+
+def hasToEarlyStop(histories, esm, logger=None, verbose=True):
+	doStop = True
+	for monitor, values in esm.items():
+		if monitor in histories.keys():
+			history = histories[monitor]
+			if len(history) > values["patience"]:
+				notEnhancedCount = 0
+				index = len(history)
+				historyIteration = history[-values["patience"]-1:]
+				for targetScore in reversed(historyIteration):
+					index -= 1
+					historyPart = history[:index] # + history[index+1:]
+					minScore = min(historyPart)
+					maxScore = max(historyPart)
+					if values['mode'] == 'min':
+						if minScore - targetScore >= values['min_delta']:
+							break # We got an enhancment
+					else:
+						if targetScore - maxScore >= values['min_delta']:
+							break # We got an enhancment
+					notEnhancedCount += 1
+				if notEnhancedCount <= values["patience"]:
+					doStop = False
+					break
+			else:
+				doStop = False
+				break
+		else:
+			logError("We didn't found " + monitor + " in the history which contains " + str(list(histories.keys())), logger=logger, verbose=verbose)
+			doStop = False
+			break
+	return doStop

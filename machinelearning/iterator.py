@@ -193,10 +193,12 @@ class InfiniteBatcher:
         self.logger = logger
         self.verbose = verbose
         self.currentGenerator = None
-        
+        self.tlock = TLock()
+
     def __iter__(self):
         return self
     def __next__(self):
+        self.tlock.acquire()
         if self.currentGenerator is None:
             self.currentGenerator = iter(self.againAndAgainIterator)
             log("Init of a new generator from the given AgainAndAgain instance...", self)
@@ -220,6 +222,7 @@ class InfiniteBatcher:
             except StopIteration:
                 self.currentGenerator = None
                 if data is None:
+                    self.tlock.release()
                     return next(self)
                 else:
                     break
@@ -231,6 +234,7 @@ class InfiniteBatcher:
                     data[i] = np.array(data[i])
             else:
                 data = np.array(data)
+        self.tlock.release()
         if isTuple:
             return tuple(data)
         else:

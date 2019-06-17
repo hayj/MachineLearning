@@ -1,5 +1,6 @@
 from sklearn.preprocessing import LabelEncoder
 from keras.utils import np_utils
+import numpy as np
 
 
 def encodeMulticlassLabels(labels, encoding='index', logger=None, verbose=True):

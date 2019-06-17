@@ -1,7 +1,7 @@
 # coding: utf-8
 
-from fr.hayj.machinelearning.stat import *;
-from fr.hayj.util.system import *;
+from machinelearning.stat import *
+from util.system import *
 
 import unittest
 

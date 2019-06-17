@@ -1,7 +1,7 @@
 # coding: utf-8
 
-from fr.hayj.util.parser import SerializableParser
-from fr.hayj.util.text import *
+from util.parser import SerializableParser
+from util.text import *
 
 class Feature(SerializableParser):
     def __init__(self, *args, **kwargs):
