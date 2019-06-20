@@ -201,7 +201,7 @@ class InfiniteBatcher:
         self.tlock.acquire()
         if self.currentGenerator is None:
             self.currentGenerator = iter(self.againAndAgainIterator)
-            log("Init of a new generator from the given AgainAndAgain instance...", self)
+            # log("Init of a new generator from the given AgainAndAgain instance...", self)
         data = None
         isTuple = False
         for i in range(self.batchSize):
@@ -240,3 +240,5 @@ class InfiniteBatcher:
         else:
             return data
 
+
+!ls

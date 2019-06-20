@@ -306,6 +306,46 @@ if mini <= 1 <= maxi:
                 'val_top_k_categorical_accuracy': [0.1, 0.2, 0.3, 0.4, 0.3, 0.3, 0.3, 0.3],
             }
             self.assertTrue(hasToEarlyStop(history, esm))
+        def test21(self):
+            esm = normalizeEarlyStopMonitor(\
+            {
+                'val_acc': {'patience': 0},
+            })
+            history = \
+            {
+                'val_acc': [0.1],
+            }
+            self.assertTrue(not hasToEarlyStop(history, esm))
+        def test22(self):
+            esm = normalizeEarlyStopMonitor(\
+            {
+                'val_acc': {'patience': 0},
+            })
+            history = \
+            {
+                'val_acc': [0.1, 0.2],
+            }
+            self.assertTrue(not hasToEarlyStop(history, esm))
+        def test23(self):
+            esm = normalizeEarlyStopMonitor(\
+            {
+                'val_acc': {'patience': 0},
+            })
+            history = \
+            {
+                'val_acc': [],
+            }
+            self.assertTrue(not hasToEarlyStop(history, esm))
+        def test24(self):
+            esm = normalizeEarlyStopMonitor(\
+            {
+                'val_acc': {'patience': 0},
+            })
+            history = \
+            {
+                'val_acc': [0.1, 0.02],
+            }
+            self.assertTrue(hasToEarlyStop(history, esm))
 
 if mini <= 2 <= maxi:
     class Test2(unittest.TestCase):

@@ -29,11 +29,11 @@ from machinelearning.utils import *
 from machinelearning.iterator import *
 
 def isCompiled(model):
-    try:
-        model.optimizer.lr
-        return True
-    except:
-        return False
+	try:
+		model.optimizer.lr
+		return True
+	except:
+		return False
 
 def toMultiGPU(model, logger=None, verbose=True):
 	try:
@@ -53,7 +53,10 @@ def iteratorToArray(it, steps=None):
 		for i in range(steps):
 			current = next(it)
 			batchs.append(current)
-		newVal = np.vstack(batchs)
+		if isListOrArray(batchs[0][0]):
+			newVal = np.vstack(batchs)
+		else:
+			newVal = np.array(flattenLists(batchs))
 	elif isinstance(it, list):
 		newVal = np.array(it)
 	elif isinstance(it, np.ndarray):
@@ -85,13 +88,12 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		metricsFreq=1,
 		metrics=None,
 		metricsFirstEpoch=0,
-		logHistoryOnEpochEnd=True,
+		logHistoryOnEpochEnd=False,
 		plotFiguresOnEpochEnd=True,
 		graphDir=None,
 		eraseGraphDir=True,
-		saveModelOnEpochEnd=True,
 		modelsDir=None,
-		doNotif=True,
+		doNotif=False,
 		doPltShow=False,
 		saveMetrics={"val_loss": "min", "val_acc": "max",},
 		stopFile=None,
@@ -132,12 +134,12 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		self.plotFiguresOnEpochEnd = plotFiguresOnEpochEnd
 		self.graphDir = graphDir
 		self.eraseGraphDir = eraseGraphDir
-		self.saveModelOnEpochEnd = saveModelOnEpochEnd
 		self.modelsDir = modelsDir
+		self.saveModelOnEpochEnd = self.modelsDir is not None
 		self.doNotif = doNotif
 		self.saveMetrics = saveMetrics
 		self.doPltShow = doPltShow
-		if self.modelsDir is None or self.originalModel is None:
+		if self.saveModelOnEpochEnd and (self.modelsDir is None or self.originalModel is None):
 			self.saveModelOnEpochEnd = False
 			logError("Please provide a modelsDir and an originalModel", self)
 		if self.graphDir is None:
@@ -340,6 +342,8 @@ def hasToEarlyStop(histories, esm, logger=None, verbose=True):
 				for targetScore in reversed(historyIteration):
 					index -= 1
 					historyPart = history[:index] # + history[index+1:]
+					if len(historyPart) == 0:
+						break
 					minScore = min(historyPart)
 					maxScore = max(historyPart)
 					if values['mode'] == 'min':

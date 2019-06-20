@@ -28,7 +28,7 @@ from systemtools.basics import *
 from systemtools.logger import *
 import numpy as np
 from sklearn.model_selection import cross_validate
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 
 
 def crossValidate\
@@ -79,7 +79,7 @@ def crossValidate\
 	# elif not isinstance(scoring, list):
 	# 	scoring = [scoring]
 	if isinstance(cv, int):
-		kfold = KFold(n_splits=cv, shuffle=shuffle, random_state=random_state)
+		kfold = StratifiedKFold(n_splits=cv, shuffle=shuffle, random_state=random_state)
 	else:
 		kfold = cv
 	if isinstance(scoring, str):
