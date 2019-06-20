@@ -240,5 +240,3 @@ class InfiniteBatcher:
         else:
             return data
 
-
-!ls

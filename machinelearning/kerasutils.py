@@ -364,3 +364,90 @@ def hasToEarlyStop(histories, esm, logger=None, verbose=True):
 			doStop = False
 			break
 	return doStop
+
+
+
+def buildRNN\
+(
+    docLength=None,
+    vocSize=None,
+    embeddingMatrix=None,
+    nbClasses=None,
+    isEmbeddingsTrainable=False,
+    denseUnits=100,
+    nbDenses=0,
+    denseActivation='tanh', # tanh, sigmoid, relu
+    rnnUnits=100,
+    firstDropout=0.2,
+    recurrentDropout=0.2,
+    denseDropout=0.2,
+    useRNNDropout=True,
+    isBidirectional=False,
+    isCuDNN=False,
+    rnnType='LSTM', # GRU, LSTM
+    addConv1D=False,
+    conv1dActivation='relu',
+    filters=32,
+    kernelSize=3,
+    poolSize=3,
+    logger=None,
+    verbose=False,
+):
+    """
+        This function return a RNN Keras model (GRU or LSTM) which can, optionaly, be CuDNN optimized, bidirectional)
+        After getting the model you can convert the model to a multi gpu model, compile the model, print the summary and plot the architecture
+    """
+    # We check values:
+    assert denseActivation in [None, 'tanh', 'sigmoid', 'relu']
+    assert rnnType in ['GRU', 'LSTM']
+    assert docLength is not None
+    assert vocSize is not None
+    assert embeddingMatrix is not None
+    assert nbClasses is not None
+    assert denseUnits is not None
+    # We find some informations:
+    embeddingsDimension = embeddingMatrix.shape[1]
+    assert embeddingsDimension <= 1500
+    # We define the model:
+    model = Sequential()
+    # We add en embedding layer:
+    model.add(Embedding(vocSize, embeddingsDimension, input_length=docLength, weights=[embeddingMatrix], trainable=isEmbeddingsTrainable))
+    # Optionnaly we add a Conv1D layer:
+    if addConv1D:
+        model.add(Conv1D(filters=filters, kernel_size=kernelSize, padding='same', activation=conv1dActivation))
+        model.add(MaxPooling1D(pool_size=poolSize))
+    # We find the RNN to add:
+    if isCuDNN:
+        if rnnType == 'GRU':
+            TheLayerClass = CuDNNGRU
+        else:
+            TheLayerClass = CuDNNLSTM
+        useRNNDropout = False
+    else:
+        if rnnType == 'GRU':
+            TheLayerClass = GRU
+        else:
+            TheLayerClass = LSTM
+    # We add a dropout:
+    if firstDropout is not None and firstDropout > 0.0 and not useRNNDropout:
+        model.add(Dropout(firstDropout))
+    if useRNNDropout:
+        if isBidirectional:
+            model.add(Bidirectional(TheLayerClass(rnnUnits, dropout=firstDropout, recurrent_dropout=recurrentDropout)))
+        else:
+            model.add(TheLayerClass(rnnUnits, dropout=firstDropout, recurrent_dropout=recurrentDropout))
+    else:
+        if isBidirectional:
+            model.add(Bidirectional(TheLayerClass(rnnUnits)))
+        else:
+            model.add(TheLayerClass(rnnUnits))
+    if recurrentDropout is not None and recurrentDropout > 0.0 and not useRNNDropout:
+        model.add(Dropout(recurrentDropout))
+    # We add dense layers:
+    for i in range(nbDenses):
+        model.add(Dense(denseUnits, activation=denseActivation))
+        if denseDropout is not None and denseDropout > 0.0:
+            model.add(Dropout(denseDropout))
+    # We add the last layer:
+    model.add(Dense(nbClasses, activation='softmax'))
+    return model
