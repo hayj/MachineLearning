@@ -28,6 +28,20 @@ from datatools.jsonutils import *
 from machinelearning.utils import *
 from machinelearning.iterator import *
 
+
+from keras.layers import LSTM, GRU, Dense, CuDNNLSTM, CuDNNGRU, Bidirectional
+from keras.layers import MaxPooling1D, TimeDistributed, Flatten, concatenate, Conv1D
+from keras.utils import multi_gpu_model, plot_model
+from keras.layers import concatenate, Input, Dropout
+from keras.models import Model, load_model, Sequential
+from keras.preprocessing.text import one_hot
+from keras.preprocessing.sequence import pad_sequences
+from keras.layers.embeddings import Embedding
+from keras.callbacks import Callback, History, ModelCheckpoint
+from keras import optimizers
+from keras import callbacks
+
+
 def isCompiled(model):
 	try:
 		model.optimizer.lr
@@ -43,30 +57,6 @@ def toMultiGPU(model, logger=None, verbose=True):
 		logException(e, logger, verbose=verbose)
 	return model
 
-
-def iteratorToArray(it, steps=None):
-	if it is None:
-		return None
-	newVal = None
-	if isinstance(it, InfiniteBatcher):
-		batchs = []
-		for i in range(steps):
-			current = next(it)
-			batchs.append(current)
-		if isListOrArray(batchs[0][0]):
-			newVal = np.vstack(batchs)
-		else:
-			newVal = np.array(flattenLists(batchs))
-	elif isinstance(it, list):
-		newVal = np.array(it)
-	elif isinstance(it, np.ndarray):
-		newVal = it
-	else:
-		newVal = []
-		for current in it:
-			newVal.append(current)
-		newVal = np.array(newVal)
-	return newVal
 
 AUTO_MODES = \
 {
@@ -148,6 +138,7 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		self.epochs = dict()
 		self.history = dict()
 		self.tt = TicToc(logger=self.logger, verbose=self.verbose)
+		self.alreadyFigured = False
 	
 	def on_train_begin(self, logs=None):
 		self.tt.tic(display=False)
@@ -205,6 +196,10 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 			for key in keys:
 				try:
 					if len(self.history[key]) > 1:
+						if not self.alreadyFigured:
+							plt.figure()
+							self.alreadyFigured = True
+						plt.clf()
 						trainKey = None
 						if key[4:] in self.history:
 							trainKey = key[4:]
@@ -219,7 +214,6 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 						plt.xlabel('Epoch')
 						plt.legend(legend, loc='upper left')
 						plt.savefig(graphDir + "/" + key + ".png", format='png')
-						plt.figure()
 				except Exception as e:
 					logException(e, self)
 			try:
@@ -264,18 +258,19 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 			log("We saved the current model in " + epochDir, self)
 			toJsonFile(lastScores, epochDir + "/scores.json")
 			# Now we remove old models that have all metrics lower than the current:
-			for currentDir in sortedGlob(self.modelsDir + "/epoch*"):
-				if "/epoch" + epochToken not in currentDir:
-					currentScores = fromJsonFile(currentDir + "/scores.json")
-					foundBetter = False
-					for currentKey, currentScore in currentScores.items():
-						if currentKey in self.saveMetrics\
-						and self.isBetterScore(currentKey, currentScore, lastScores[currentKey]):
-							foundBetter = True
-							break
-					if not foundBetter:
-						log("We remove " + currentDir + " because all scores are lower", self)
-						remove(currentDir, minSlashCount=4)				
+			if self.saveModelOnEpochEnd:
+				for currentDir in sortedGlob(self.modelsDir + "/epoch*"):
+					if "/epoch" + epochToken not in currentDir:
+						currentScores = fromJsonFile(currentDir + "/scores.json")
+						foundBetter = False
+						for currentKey, currentScore in currentScores.items():
+							if currentKey in self.saveMetrics\
+							and self.isBetterScore(currentKey, currentScore, lastScores[currentKey]):
+								foundBetter = True
+								break
+						if not foundBetter:
+							log("We remove " + currentDir + " because all scores are lower", self)
+							remove(currentDir, minSlashCount=4)				
 	
 	def on_epoch_end(self, epoch, logs=dict()):
 		self.tt.tic("Epoch " + str(epoch) + " done")
@@ -374,8 +369,7 @@ def buildRNN\
     embeddingMatrix=None,
     nbClasses=None,
     isEmbeddingsTrainable=False,
-    denseUnits=100,
-    nbDenses=0,
+    denseUnits=[],
     denseActivation='tanh', # tanh, sigmoid, relu
     rnnUnits=100,
     firstDropout=0.2,
@@ -444,8 +438,8 @@ def buildRNN\
     if recurrentDropout is not None and recurrentDropout > 0.0 and not useRNNDropout:
         model.add(Dropout(recurrentDropout))
     # We add dense layers:
-    for i in range(nbDenses):
-        model.add(Dense(denseUnits, activation=denseActivation))
+    for units in denseUnits:
+        model.add(Dense(units, activation=denseActivation))
         if denseDropout is not None and denseDropout > 0.0:
             model.add(Dropout(denseDropout))
     # We add the last layer:

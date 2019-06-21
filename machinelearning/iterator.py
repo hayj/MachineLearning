@@ -9,10 +9,35 @@ from multiprocessing import cpu_count, Process, Pipe, Queue, JoinableQueue
 import queue
 import numpy as np
 from threading import Lock as TLock
+from machinelearning.utils import *
 
 
 TERMINATED_TOKEN = "__TERMINATED__"
 NO_RESULT_TOKEN = "__NO_RESULT__"
+
+def iteratorToArray(it, steps=None):
+    if it is None:
+        return None
+    newVal = None
+    if isinstance(it, InfiniteBatcher):
+        batchs = []
+        for i in range(steps):
+            current = next(it)
+            batchs.append(current)
+        if isListOrArray(batchs[0][0]):
+            newVal = np.vstack(batchs)
+        else:
+            newVal = np.array(flattenLists(batchs))
+    elif isinstance(it, list):
+        newVal = np.array(it)
+    elif isinstance(it, np.ndarray):
+        newVal = it
+    else:
+        newVal = []
+        for current in it:
+            newVal.append(current)
+        newVal = np.array(newVal)
+    return newVal
 
 def itemGeneratorWrapper(container, itemGenerator, itemGeneratorArgs, itemGeneratorKwargs, subProcessParseFunct, subProcessParseFunctArgs, subProcessParseFunctKwargs, itemQueue, verbose=False, name=None):
     logger = None
