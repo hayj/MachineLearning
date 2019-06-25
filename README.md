@@ -6,9 +6,6 @@
 
 ## Iterator
 
-See the code to have more information:
+This module is usefull in the case you want to create generators for Machine Learning or Deep Learning (e.g. on Keras with `fit_generator`). The tool will help you to easily create generators which yield batches of samples infinitely in multiple processes.
 
-	>>> from machinelearning.optimizer import *
-	>>> from nlptools.bandit import *
-	>>> from nlptools.function import *
-
+Read [this notebook](https://github.com/hayj/MachineLearning/blob/master/machinelearning/demo/iterator.ipynb) to get started.
