@@ -4,7 +4,7 @@
 	git clone https://github.com/hayj/MachineLearning.git
 	pip install ./MachineLearning/wm-dist/*.tar.gz
 
-## Usage
+## Iterator
 
 See the code to have more information:
 
