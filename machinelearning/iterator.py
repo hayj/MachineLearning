@@ -204,6 +204,114 @@ class InfiniteBatcher:
         This class take an AgainAndAgain iterator and yield batch samples
         An AgainAndAgain iterator is an iterator that calling `iter(instance)` or `for i in instance`
         will produce a new fresh iterator to be able to iterate again and again...
+
+        Each tuple which is yield by the iterator given will be transformed in batchs.
+        It means instead of return (a, b) then (c, d) then (e, f) (from the AgainAndAgain instance)
+        it wil return, for a bacth size of 2, ([a, c], [b, d]) then ([e], [f]) then ([a, c], [b, d]) then ([e], [f]) etc infinitely without StopIteration, which mean without the need to call `for i in instance` several time.
+
+        It will automatically detect if yielded elements are tuples... This mean if your againAndAgainIterator doesn't yield tuples, the infinite batcher will simply yield batches of elements instead of batches of tuples.
+
+        This class is usefull to create generators for keras `fit_generator`.
+
+        To pass an InfiniteBatcher to keras `fit_generator` you must first count the number of samples and call `history = model.fit_generator(myInfiniteBatcher, steps_per_epoch=math.ceil(trainSamplesCount / myInfiniteBatcher.batchSize)` 
+        
+        Use shuffle=1 to shuffle each bacthes. If shuffle > 1, multiple batches will be flattened, shuffled, re-splitted and returned... If shuffle is None or 0, no shuffling will be applied.
+
+        Use skip to skip n batches, typically usefull when you resume a deep learning training from a previous train (to do not start allways at the beggining of the dataset if you resume your training again and again...)
+
+        Use queueSize > 1 to pre-load batches
+
+        TODO param `fillBatches` which never let a batch had a len lower that the batch size (typically when the end of the dataset arrive with a StopIteration)
+
+    """
+    def __init__(self, againAndAgainIterator, batchSize=128, skip=0, shuffle=0, seed=0, toNumpyArray=True, queueSize=1, logger=None, verbose=True):
+        assert isinstance(againAndAgainIterator, AgainAndAgain)
+        self.logger = logger
+        self.verbose = verbose
+        self.skip = skip
+        self.shuffle = shuffle
+        if self.shuffle is None or self.shuffle < 0:
+            self.shuffle = 0
+        self.againAndAgainIterator = againAndAgainIterator
+        self.toNumpyArray = toNumpyArray
+        self.batchSize = batchSize
+        self.currentGenerator = None
+        self.tlock = TLock()
+        self.queueSize = queueSize
+        if self.queueSize < 1:
+            self.queueSize = 1
+        self.rd = random.Random(seed)
+        self.queue = queue.Queue()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        with self.tlock:
+            while self.queue.qsize() < self.queueSize:
+                self.__enqueue()
+            return self.queue.get()
+
+    def __enqueue(self):
+        batches = []
+        if self.shuffle == 0 or self.shuffle == 1:
+            nbBatches = 1
+        else:
+            nbBatches = self.shuffle
+        gotStop = False
+        while len(batches) < nbBatches and not gotStop:
+            if self.currentGenerator is None:
+                self.currentGenerator = iter(self.againAndAgainIterator)
+            batch = None
+            isTuple = False
+            try:
+                for i in range(self.batchSize):
+                    current = next(self.currentGenerator)
+                    if isinstance(current, tuple):
+                        isTuple = True
+                        if batch is None:
+                            batch = [None] * len(current)
+                            for u in range(len(batch)):
+                                batch[u] = []
+                        for tupleIndex in range(len(current)):
+                            batch[tupleIndex].append(current[tupleIndex])
+                    else:
+                        if batch is None:
+                            batch = []
+                        batch.append(current)
+            except StopIteration:
+                self.currentGenerator = None
+                gotStop = True
+            if batch is not None and len(batch) > 0:
+                batches.append(batch)
+        if self.shuffle > 0:
+            tmpBatchesLen = len(batches)
+            batches = flattenLists(batches)
+            self.rd.shuffle(batches)
+            batches = split(batches, tmpBatchesLen)
+        if self.toNumpyArray:
+            for u in range(len(batches)):
+                if isTuple:
+                    for i in range(len(batches[u])):
+                        batches[u][i] = np.array(batches[u][i])
+                else:
+                    batches[u] = np.array(batches[u])
+        if isTuple:
+            for i in range(len(batches)):
+                batches[i] = tuple(batches[i])
+        for batch in batches:
+            if self.skip == 0:
+                self.queue.put(batch)
+            else:
+                self.skip -= 1
+
+
+
+class InfiniteBatcher_deprecated1:
+    """
+        This class take an AgainAndAgain iterator and yield batch samples
+        An AgainAndAgain iterator is an iterator that calling `iter(instance)` or `for i in instance`
+        will produce a new fresh iterator to be able to iterate again and again...
         Each tuple which is yield by the iterator given will be transformed in batchs.
         It means instead of return (a, b) then (c, d) then (e, f) (from the AgainAndAgain instance)
         it wil return, for a bacth size of 2, ([a, c], [b, d]) then ([e], [f]) then ([a, c], [b, d]) then ([e], [f]) etc infinitely without StopIteration, which mean without the need to call `for i in instance` several time.
@@ -212,11 +320,11 @@ class InfiniteBatcher:
     """
     def __init__(self, againAndAgainIterator, batchSize, toNumpyArray=True, logger=None, verbose=True):
         assert isinstance(againAndAgainIterator, AgainAndAgain)
+        self.logger = logger
+        self.verbose = verbose
         self.againAndAgainIterator = againAndAgainIterator
         self.toNumpyArray = toNumpyArray
         self.batchSize = batchSize
-        self.logger = logger
-        self.verbose = verbose
         self.currentGenerator = None
         self.tlock = TLock()
 

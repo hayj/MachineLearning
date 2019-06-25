@@ -63,6 +63,8 @@ AUTO_MODES = \
 	'val_loss': 'min',
 	'val_acc': 'max',
 	'val_top_k_categorical_accuracy': 'max',
+	'val_sparse_categorical_accuracy': 'max',
+	'val_sparse_top_k_categorical_accuracy': 'max',
 }
 
 class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master/keras/callbacks.py#L614
@@ -89,6 +91,7 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		stopFile=None,
 		historyFile=None,
 		earlyStopMonitor=None,
+		initialEpoch=None,
 	):
 		"""
 			xVal and yVal can be an InfiniteBatcher instance (see machinelearing.iterator.InfiniteBatcher) or any iterable (np arrays, list, generator, machinelearing.iterator.ConsistentIterator...)
@@ -135,8 +138,24 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		if self.graphDir is None:
 			self.plotFiguresOnEpochEnd = False
 			logError("Please provide a graph directory", self)
-		self.epochs = dict()
-		self.history = dict()
+		self.initialEpoch = initialEpoch
+		if isFile(self.historyFile):
+			historyFileContent = fromJsonFile(self.historyFile)
+			self.epochs = historyFileContent["epochs"]
+			self.history = historyFileContent["history"]
+			logWarning("We loaded previous epochs and history", self)
+			if self.initialEpoch is not None:
+				previousLength = len(dictFirstValue(self.epochs))
+				newLength = len(dictFirstValue(self.epochs)[:self.initialEpoch])
+				if previousLength != newLength:
+					logWarning("We reduced the history from a length of " + str(previousLength) + " to a length of " + str(newLength), self)
+					for key in self.epochs.keys():
+						self.epochs[key] = self.epochs[key][:self.initialEpoch]
+					for key in self.history.keys():
+						self.history[key] = self.history[key][:self.initialEpoch]
+		else:
+			self.epochs = dict()
+			self.history = dict()
 		self.tt = TicToc(logger=self.logger, verbose=self.verbose)
 		self.alreadyFigured = False
 	
@@ -214,15 +233,12 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 						plt.xlabel('Epoch')
 						plt.legend(legend, loc='upper left')
 						plt.savefig(graphDir + "/" + key + ".png", format='png')
+						if self.doPltShow:
+							plt.show()
+						else:
+							plt.close()
 				except Exception as e:
 					logException(e, self)
-			try:
-				if self.doPltShow:
-					plt.show()
-				else:
-					plt.close()
-			except Exception as e:
-				logException(e, self)
 		except Exception as e:
 			logException(e, self)
 	
@@ -262,15 +278,20 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 				for currentDir in sortedGlob(self.modelsDir + "/epoch*"):
 					if "/epoch" + epochToken not in currentDir:
 						currentScores = fromJsonFile(currentDir + "/scores.json")
-						foundBetter = False
-						for currentKey, currentScore in currentScores.items():
-							if currentKey in self.saveMetrics\
-							and self.isBetterScore(currentKey, currentScore, lastScores[currentKey]):
-								foundBetter = True
-								break
-						if not foundBetter:
-							log("We remove " + currentDir + " because all scores are lower", self)
-							remove(currentDir, minSlashCount=4)				
+						try:
+							if currentScores is not None:
+								foundBetter = False
+								for currentKey, currentScore in currentScores.items():
+									if currentKey in self.saveMetrics\
+									and self.isBetterScore(currentKey, currentScore, lastScores[currentKey]):
+										foundBetter = True
+										break
+								if not foundBetter:
+									log("We remove " + currentDir + " because all scores are lower", self)
+									remove(currentDir, minSlashCount=4)
+						except Exception as e:
+							logException(e, self)
+							remove(currentDir, minSlashCount=4, doRaise=False)
 	
 	def on_epoch_end(self, epoch, logs=dict()):
 		self.tt.tic("Epoch " + str(epoch) + " done")
