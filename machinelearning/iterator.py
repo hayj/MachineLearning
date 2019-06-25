@@ -15,6 +15,15 @@ from machinelearning.utils import *
 TERMINATED_TOKEN = "__TERMINATED__"
 NO_RESULT_TOKEN = "__NO_RESULT__"
 
+class AgainAndAgain():
+    # https://www.reddit.com/r/Python/comments/40idba/easy_way_to_make_an_iterator_from_a_generator_in/
+    def __init__(self, generator_func, *args, **kwargs):
+        self.generator_func = generator_func
+        self.args = args
+        self.kwargs = kwargs
+    def __iter__(self):
+        return self.generator_func(*self.args, **self.kwargs)
+
 def iteratorToArray(it, steps=None):
     if it is None:
         return None
