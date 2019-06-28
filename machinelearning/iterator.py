@@ -249,7 +249,8 @@ class InfiniteBatcher:
         self.queueSize = queueSize
         if self.queueSize < 1:
             self.queueSize = 1
-        self.rd = random.Random(seed)
+        self.seed = seed
+        self.rd = random.Random(self.seed)
         self.queue = queue.Queue()
 
     def __iter__(self):
@@ -272,24 +273,15 @@ class InfiniteBatcher:
             if self.currentGenerator is None:
                 self.currentGenerator = iter(self.againAndAgainIterator)
             batch = None
-            isTuple = False
             try:
                 for i in range(self.batchSize):
                     current = next(self.currentGenerator)
-                    if isinstance(current, tuple):
-                        isTuple = True
-                        if batch is None:
-                            batch = [None] * len(current)
-                            for u in range(len(batch)):
-                                batch[u] = []
-                        for tupleIndex in range(len(current)):
-                            batch[tupleIndex].append(current[tupleIndex])
-                    else:
-                        if batch is None:
-                            batch = []
-                        batch.append(current)
+                    if batch is None:
+                        batch = []
+                    batch.append(current)
             except StopIteration:
                 self.currentGenerator = None
+                self.rd = random.Random(self.seed)
                 gotStop = True
             if batch is not None and len(batch) > 0:
                 batches.append(batch)
@@ -298,6 +290,26 @@ class InfiniteBatcher:
             batches = flattenLists(batches)
             self.rd.shuffle(batches)
             batches = split(batches, tmpBatchesLen)
+        isTuple = False
+        try:
+            isTuple = isinstance(batches[0][0], tuple)
+        except: pass
+        if isTuple:
+            newBatches = []
+            for u in range(len(batches)):
+                batch = []
+                for i in range(len(batches[0][0])):
+                    batch.append([])
+                newBatches.append(batch)
+            batchIndex = 0
+            for batch in batches:
+                for currentTuple in batch:
+                    tupleIndex = 0
+                    for element in currentTuple:
+                        newBatches[batchIndex][tupleIndex].append(element)
+                        tupleIndex += 1
+                batchIndex += 1
+            batches = newBatches
         if self.toNumpyArray:
             for u in range(len(batches)):
                 if isTuple:

@@ -136,6 +136,61 @@ if mini <= 1 <= maxi:
             self.assertTrue(data[0][1][0] == 4)
             self.assertTrue(data[1][1][0] == 1)
             self.assertTrue(data[1][2][0] == 2)
+        def test8(self):
+            def itemGen():
+                for i in range(15):
+                    yield ("a", "b", "c", "d", "e")
+            random.seed(0)
+            aaa = AgainAndAgain(itemGen)
+            infAAA = InfiniteBatcher(aaa, 3, shuffle=0, toNumpyArray=False)
+            count = 0
+            data = []
+            for i in range(1000):
+                count += 1
+                current = next(infAAA)
+                data.append(current)
+            self.assertTrue(count >= 1000)
+            self.assertTrue(data[0][0] == ["a", "a", "a"])
+            self.assertTrue(data[0][1] == ["b", "b", "b"])
+            self.assertTrue(data[0][4] == ["e", "e", "e"])
+            self.assertTrue(data[100][0] == ["a", "a", "a"])
+            self.assertTrue(data[100][1] == ["b", "b", "b"])
+            self.assertTrue(data[100][4] == ["e", "e", "e"])
+        def test9(self):
+            def itemGen():
+                for i in range(15):
+                    yield ("a", "b", "c", "d", "e")
+            random.seed(0)
+            aaa = AgainAndAgain(itemGen)
+            infAAA = InfiniteBatcher(aaa, 3, shuffle=4, toNumpyArray=False)
+            count = 0
+            data = []
+            for i in range(1000):
+                count += 1
+                current = next(infAAA)
+                data.append(current)
+            self.assertTrue(count >= 1000)
+            self.assertTrue(data[0][1] == ["b", "b", "b"])
+            self.assertTrue(data[0][0] == ["a", "a", "a"])
+            self.assertTrue(data[0][4] == ["e", "e", "e"])
+            self.assertTrue(data[100][0] == ["a", "a", "a"])
+            self.assertTrue(data[100][1] == ["b", "b", "b"])
+            self.assertTrue(data[100][4] == ["e", "e", "e"])
+        def test10(self):
+            def itemGen():
+                for i in range(15):
+                    yield ("a", "b", "c", "d", "e")
+            random.seed(0)
+            aaa = AgainAndAgain(itemGen)
+            infAAA = InfiniteBatcher(aaa, 3, shuffle=4, toNumpyArray=True)
+            count = 0
+            data = []
+            for i in range(1000):
+                count += 1
+                current = next(infAAA)
+                data.append(current)
+            self.assertTrue(count >= 1000)
+            self.assertTrue(np.array_equal(data[0][1], np.array(["", "b", "b"])))
                 
 
 

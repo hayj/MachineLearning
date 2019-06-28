@@ -92,6 +92,10 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 		historyFile=None,
 		earlyStopMonitor=None,
 		initialEpoch=None,
+		batchesPassedFile=None,
+		batchesAmount=None,
+		batchesPassed=None,
+		batchesPassedSerializeEach=1,
 	):
 		"""
 			xVal and yVal can be an InfiniteBatcher instance (see machinelearing.iterator.InfiniteBatcher) or any iterable (np arrays, list, generator, machinelearing.iterator.ConsistentIterator...)
@@ -103,6 +107,11 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 				'val_top_k_categorical_accuracy': {'patience': 50, 'min_delta': 0, 'mode': 'auto'},
 			}
 			You have to give at least a patience for each 
+
+			Set batchesPassedFile to save the current batches count until batchesAmount
+			Set batchesPassed to start the count from this value
+			Usefull to jump some batches in yur batch generator
+			set batchesPassedSerializeEach > 1 to do not serialize at each batch
 		"""
 		self.logger = logger
 		self.verbose = verbose
@@ -158,7 +167,34 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 			self.history = dict()
 		self.tt = TicToc(logger=self.logger, verbose=self.verbose)
 		self.alreadyFigured = False
-	
+		# BATCH STATE:
+		self.batchesPassedFile = batchesPassedFile
+		self.batchesAmount = batchesAmount
+		self.batchesPassed = batchesPassed
+		if self.batchesPassed is None:
+			if isFile(self.batchesPassedFile):
+				self.batchesPassed = int(fileToStr(self.batchesPassedFile))
+				logWarning("WARNING We loaded previous batchesPassed from " + self.batchesPassedFile, self)
+			else:
+				self.batchesPassed = 0
+		self.batchesPassedSerializeEach = batchesPassedSerializeEach
+		if self.batchesPassedFile is not None:
+			assert self.batchesAmount is not None
+
+	def saveBatchesPassed(self):
+		if self.batchesPassedFile is not None:
+			# Here we set batchesPassed as the number of batches done (already passed):
+			self.batchesPassed += 1
+			# Then we reset to 0 if all batches passed:
+			if self.batchesPassed == self.batchesAmount:
+				self.batchesPassed
+			# And we serialize it:
+			if self.batchesAmount > 0 and self.batchesAmount % self.batchesPassedSerializeEach == 0:
+				strToFile(str(self.batchesAmount), self.batchesPassedFile)
+
+	def on_batch_end(self, batch, logs={}):
+		self.saveBatchesPassed()
+
 	def on_train_begin(self, logs=None):
 		self.tt.tic(display=False)
 
@@ -292,6 +328,7 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
 						except Exception as e:
 							logException(e, self)
 							remove(currentDir, minSlashCount=4, doRaise=False)
+
 	
 	def on_epoch_end(self, epoch, logs=dict()):
 		self.tt.tic("Epoch " + str(epoch) + " done")
