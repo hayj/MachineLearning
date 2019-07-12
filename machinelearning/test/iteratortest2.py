@@ -190,7 +190,7 @@ if mini <= 1 <= maxi:
                 current = next(infAAA)
                 data.append(current)
             self.assertTrue(count >= 1000)
-            self.assertTrue(np.array_equal(data[0][1], np.array(["", "b", "b"])))
+            self.assertTrue(np.array_equal(data[0][1], np.array(["b", "b", "b"])))
                 
 
 

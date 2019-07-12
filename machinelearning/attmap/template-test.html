@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Title of the document</title>
+<style>
+
+* {
+margin: 0;
+padding: 0;
+}
+
+body
+{
+	width: 400px;
+	margin-left: 100px;
+}
+
+.s1
+{
+	position: relative;
+}
+
+.s1 > .text
+{
+	//background-color: rgba(50, 50, 50, 0.5);
+}
+
+.s1 > .gradient1
+{
+	padding: 0px;
+	left: -30px;
+	width: calc(100% + 60px);
+	height: 50%;
+	background: radial-gradient(rgba(255,0,0,0.8), rgba(255,255,255,0.0) 70%);
+	position: absolute;
+}
+.s1 > .gradient2
+{
+	padding: 0px;
+	top:50%;
+	left: -15px;
+	width: calc(100% + 30px);
+	height: 50%;
+	background: radial-gradient(rgba(0,255,0,0.8) 70px, rgba(255,255,255,0.0));
+	//background: radial-gradient(rgba(255,0,0,0.8), rgba(255,255,255,0.0), rgba(0,255,0,0.0));
+	//background: radial-gradient(circle at center, red 0, blue, green 100%);
+	position: absolute;
+}
+
+.s1
+{
+	margin: 0;
+	padding: 0;
+}
+
+.s1 > .plain1on1
+{
+	position: absolute;
+	top: 0%;
+	height: 100%;
+	left: -2px;
+	width: 100%;
+	background: linear-gradient(0.5turn, rgba(255,0,0,0.0), rgba(255,0,0,0.9), rgba(255,0,0,0.0));
+}
+
+.s1 > .plain1on2
+{
+	position: absolute;
+	top:0%;
+	height: 50%;
+	left: -2px;
+	width: 100%;
+	background: linear-gradient(0.5turn, rgba(255,0,0,0.0), rgba(255,0,0,0.9), rgba(255,0,0,0.0));
+}
+.s1 > .plain2on2
+{
+	position: absolute;
+	top:50%;
+	height: 50%;
+	left: -2px;
+	width: 100%;
+	background: linear-gradient(0.5turn, rgba(0,255,0,0.0), rgba(0,255,0,0.9), rgba(0,255,0,0.0));
+}
+
+</style>
+
+</head>
+
+<body>
+	<div>
+		<span class="s1">
+			<span class="text">The</span>
+			<span class="gradient1"></span>
+			<span class="gradient2"></span>
+		</span>
+		<span class="s1">
+			<span class="text">Thezzzzzzzz</span>
+			<!--<span class="gradient1"></span>
+			<span class="gradient2"></span>-->
+		</span>
+		<span class="s1">
+			<span class="text">Thezzzzzzzzrrrrrrrrrrrrrrrrrrrrrrrrrrr</span>
+			<span class="gradient1"></span>
+			<span class="gradient2"></span>
+		</span>
+		<span id="s2">content</span> <span id="s3">of</span> <span id="s4">the</span> <span id="s5">document</span> <span id="s6">......</span>
+	</div>
+
+	<div>
+		<span class="s1">
+			<span class="text">The</span>
+			<span class="plain1on1"></span>
+		</span>
+		<span class="s1">
+			<span class="text">Thezzzzzzzz</span>
+			<!--<span class="gradient1"></span>
+			<span class="gradient2"></span>-->
+		</span>
+		<span class="s1">
+			<span class="text">Thezzzzzzzzrrrrrrrrrrrrrrrrrrrrrrrrrrr</span>
+			<span class="plain1on2" data-content="red"></span>
+			<span class="plain2on2"></span>
+		</span>
+		<span class="s1">
+			<span class="text">,</span>
+			<span class="plain1on2"></span>
+			<span class="plain2on2"></span>
+		</span>
+		<span id="s2">content</span> <span id="s3">of</span> <span id="s4">the</span> <span id="s5">document</span> <span id="s6">......</span>
+	</div>
+
+</body>
+
+</html> 

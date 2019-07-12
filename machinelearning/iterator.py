@@ -233,11 +233,25 @@ class InfiniteBatcher:
         TODO param `fillBatches` which never let a batch had a len lower that the batch size (typically when the end of the dataset arrive with a StopIteration)
 
     """
-    def __init__(self, againAndAgainIterator, batchSize=128, skip=0, shuffle=0, seed=0, toNumpyArray=True, queueSize=1, logger=None, verbose=True):
+    def __init__\
+    (
+        self,
+        againAndAgainIterator,
+        batchSize=128,
+        skip=0,
+        shuffle=0,
+        seed=0,
+        toNumpyArray=True,
+        queueSize=1,
+        logger=None,
+        verbose=True,
+    ):
         assert isinstance(againAndAgainIterator, AgainAndAgain)
         self.logger = logger
         self.verbose = verbose
         self.skip = skip
+        if self.skip is None:
+            self.skip = 0
         self.shuffle = shuffle
         if self.shuffle is None or self.shuffle < 0:
             self.shuffle = 0
