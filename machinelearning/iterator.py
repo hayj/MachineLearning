@@ -246,6 +246,9 @@ class InfiniteBatcher:
         logger=None,
         verbose=True,
     ):
+        # assert isinstance(againAndAgainIterator, AgainAndAgain) or isinstance(againAndAgainIterator, list)
+        # if isinstance(againAndAgainIterator, list):
+        #     againAndAgainIterator = iter(againAndAgainIterator)
         assert isinstance(againAndAgainIterator, AgainAndAgain)
         self.logger = logger
         self.verbose = verbose

@@ -99,6 +99,9 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
         initialEpoch=None,
         batchesAmount=None,
         batchesPassed=0,
+
+        saveFunct=None,
+        saveFunctKwargs=None,
     ):
         """
             xVal and yVal can be an InfiniteBatcher instance (see machinelearing.iterator.InfiniteBatcher) or any iterable (np arrays, list, generator, machinelearing.iterator.ConsistentIterator...)
@@ -122,6 +125,8 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
         normalizeEarlyStopMonitor(self.earlyStopMonitor,
                 logger=self.logger, verbose=self.verbose)
         assert not isinstance(xVal, InfiniteBatcher) or steps is not None
+        self.saveFunct = saveFunct
+        self.saveFunctKwargs = saveFunctKwargs
         self.historyFile = historyFile
         self.stopFile = stopFile
         self.originalModel = originalModel
@@ -297,7 +302,18 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
         if foundBetter:
             epochDir = self.modelsDir + "/epoch" + epochToken
             mkdir(epochDir)
-            self.originalModel.save(epochDir + "/model.h5")
+            # We save the model using a custom function (for exemple machinelearning.kerasmodels.saveModel):
+            if self.saveFunct is not None:
+                currentKwargs = self.saveFunctKwargs
+                if currentKwargs is None:
+                    currentKwargs = dict()
+                if "verbose" not in currentKwargs:
+                	currentKwargs["verbose"] = False
+                self.saveFunct(self.originalModel, epochDir,
+                    **currentKwargs, logger=self.logger)
+            # Or we just save the model using the keras method:
+            else:
+                self.originalModel.save(epochDir + "/model.h5")
             log("We saved the current model in " + epochDir, self)
             toJsonFile(lastScores, epochDir + "/scores.json")
             log("We saved scores in " + epochDir + "/scores.json", self)
@@ -416,125 +432,3 @@ def hasToEarlyStop(histories, esm, logger=None, verbose=True):
     return doStop
 
 
-
-def buildRNN_sequential_deprecated\
-(
-    docLength=None,
-    vocSize=None,
-    embeddingMatrix=None,
-    nbClasses=None,
-    isEmbeddingsTrainable=False,
-    denseUnits=[],
-    denseActivation='tanh', # tanh, sigmoid, relu
-    rnnUnits=100,
-    embSpacialDropout=0.2,
-    firstDropout=0.2,
-    recurrentDropout=0.2,
-    denseDropout=0.2,
-    useRNNDropout=True,
-    isBidirectional=False,
-    isCuDNN=False,
-    rnnType='LSTM', # GRU, LSTM
-    addConv1D=False,
-    conv1dActivation='relu',
-    filters=32,
-    kernelSize=3,
-    poolSize=3,
-    bnAfterEmbedding=False,
-    bnAfterRNN=False,
-    bnAfterDenses=False,
-    bnAfterLast=False,
-    bnBeforeActivation=True,
-    logger=None,
-    verbose=False,
-):
-    """
-        This function return a RNN Keras model (GRU or LSTM) which can, optionaly, be CuDNN optimized, bidirectional)
-        After getting the model you can convert the model to a multi gpu model, compile the model, print the summary and plot the architecture
-    """
-    # We check values:
-    assert denseActivation in [None, 'tanh', 'sigmoid', 'relu']
-    assert rnnType in ['GRU', 'LSTM']
-    assert docLength is not None
-    assert vocSize is not None
-    assert embeddingMatrix is not None
-    assert nbClasses is not None
-    assert denseUnits is not None
-    # We remove dropouts:
-    if bnAfterRNN and firstDropout > 0.0:
-        firstDropout = 0.0
-        logWarning("We remove firstDropout because we use bnAfterRNN", logger=logger, verbose=verbose)
-    if bnAfterRNN and recurrentDropout > 0.0:
-        recurrentDropout = 0.0
-        logWarning("We remove recurrentDropout because we use bnAfterRNN", logger=logger, verbose=verbose)
-    if bnAfterDenses and denseDropout > 0.0:
-        denseDropout = 0.0
-        logWarning("We remove denseDropout because we use bnAfterDenses", logger=logger, verbose=verbose)
-    # We find some informations:
-    embeddingsDimension = embeddingMatrix.shape[1]
-    assert embeddingsDimension <= 1500
-    # We define the model:
-    model = Sequential()
-    # We add en embedding layer:
-    model.add(Embedding(vocSize, embeddingsDimension, input_length=docLength, weights=[embeddingMatrix], trainable=isEmbeddingsTrainable))
-    # We add a dropout to the emb layer:
-    if embSpacialDropout is not None and embSpacialDropout > 0.0:
-        model.add(SpatialDropout1D(embSpacialDropout))
-    # We add a batch normalization:
-    if bnAfterEmbedding:
-        model.add(BatchNormalization())
-    # Optionnaly we add a Conv1D layer:
-    if addConv1D:
-        model.add(Conv1D(filters=filters, kernel_size=kernelSize, padding='same', activation=conv1dActivation))
-        model.add(MaxPooling1D(pool_size=poolSize))
-    # We find the RNN to add:
-    if isCuDNN:
-        if rnnType == 'GRU':
-            TheLayerClass = CuDNNGRU
-        else:
-            TheLayerClass = CuDNNLSTM
-        useRNNDropout = False
-    else:
-        if rnnType == 'GRU':
-            TheLayerClass = GRU
-        else:
-            TheLayerClass = LSTM
-    # We add a dropout and the RNN:
-    if firstDropout is not None and firstDropout > 0.0 and not useRNNDropout:
-        model.add(Dropout(firstDropout))
-    if useRNNDropout:
-        if isBidirectional:
-            model.add(Bidirectional(TheLayerClass(rnnUnits, dropout=firstDropout, recurrent_dropout=recurrentDropout)))
-        else:
-            model.add(TheLayerClass(rnnUnits, dropout=firstDropout, recurrent_dropout=recurrentDropout))
-    else:
-        if isBidirectional:
-            model.add(Bidirectional(TheLayerClass(rnnUnits)))
-        else:
-            model.add(TheLayerClass(rnnUnits))
-    if recurrentDropout is not None and recurrentDropout > 0.0 and not useRNNDropout:
-        model.add(Dropout(recurrentDropout))
-    # We add a bn:
-    if bnAfterRNN:
-        model.add(BatchNormalization())
-    # We add dense layers:
-    for units in denseUnits:
-        model.add(Dense(units))
-        if bnAfterDenses and bnBeforeActivation:
-            model.add(BatchNormalization())
-        model.add(Activation(denseActivation))
-        if bnAfterDenses and not bnBeforeActivation:
-            model.add(BatchNormalization())
-        if denseDropout is not None and denseDropout > 0.0:
-            model.add(Dropout(denseDropout))
-    # We add the last layer:
-    model.add(Dense(nbClasses))
-    if bnAfterLast and bnBeforeActivation:
-        model.add(BatchNormalization())
-    # In case it is categorical_crossentropy:
-    model.add(Activation('softmax'))
-    # In case we do binary_crossentropy:
-    # out = Dense(1, activation='sigmoid')(x)
-    if bnAfterLast and not bnBeforeActivation:
-        model.add(BatchNormalization())
-    return model

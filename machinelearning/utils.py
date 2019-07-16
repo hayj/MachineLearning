@@ -1,9 +1,8 @@
 
 import numpy as np
 from systemtools.basics import *
+from machinelearning import config as mlConf
 
-
-MASK_TOKEN = "__M_A_S_K__"
 
 def isListOrArray(*args, **kwargs):
 	return isArrayOrList(*args, **kwargs)
@@ -31,7 +30,7 @@ def stackArrays(arrays):
 def padSequences(ls, *args, **kwargs):
     return [padSequence(l, *args, **kwargs) for l in ls]
 
-def padSequence(ls, maxlen, padding='pre', truncating='post', value=MASK_TOKEN, removeEmptySentences=True):
+def padSequence(ls, maxlen, padding='pre', truncating='post', value=mlConf.MASK_TOKEN, removeEmptySentences=True):
     """
         This function pad sequence of tokens (string) as the keras pad_sequences function.
         It can also pad senquences of sentences.
