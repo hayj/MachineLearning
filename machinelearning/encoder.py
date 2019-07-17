@@ -14,6 +14,7 @@ from machinelearning import config as mlConf
 def encodeSample\
 (
 	sample,
+	doLower=False,
 	vocIndex=None,
 	docLength=None,
 	encode=True,
@@ -30,6 +31,11 @@ def encodeSample\
 		This function encode an input (tokens, label)
 	"""
 	(tokens, label) = sample
+	if doLower and tokens is not None and len(tokens) > 0 and isinstance(tokens[0], str):
+		newTokens = []
+		for token in tokens:
+			newTokens.append(token.lower())
+		tokens = newTokens
 	mask = None
 	if encode:
 		newTokens = []
@@ -96,6 +102,8 @@ class TextEncoder:
 		samplesGeneratorKwargs=dict(),
 		filesRatio=None,
 
+		doLower=None, # Automatically set according to word embeddings
+
 		split=[1.0], # [1.0], [0.8, 0.1, 0.1], [0.1] * 10
 		persist=None,
 
@@ -132,6 +140,7 @@ class TextEncoder:
 		self.samplesGeneratorArgs = samplesGeneratorArgs
 		self.samplesGeneratorKwargs = samplesGeneratorKwargs
 		self.filesRatio = filesRatio
+		self.doLower = doLower
 		self.split = split
 		self.persist = persist
 		self.labelEncoder = labelEncoder
@@ -150,6 +159,14 @@ class TextEncoder:
 		if self.wordEmbeddings is None:
 			self.wordEmbeddings = Embeddings("test").getVectors()
 		self.wordEmbeddings = copy.copy(self.wordEmbeddings)
+		# We set doLower according to word embeddings:
+		if self.doLower is None:
+			foundUpper = False
+			for w in self.wordEmbeddings.keys():
+				if w != w.lower():
+					foundUpper = True
+					break
+			self.doLower = not foundUpper
 		# We init a random object for split and other things:
 		self.rnd = random.Random(seed)
 		# We split files:
@@ -209,11 +226,7 @@ class TextEncoder:
 				currentCache = []
 				if persist:
 					log("Starting to cache the part " + str(partIndex) + "...", self)
-					currentCache = [row for row in self.getPart\
-					(
-						partIndex,
-						pad=False, encodeLabel=False, encode=False,
-					)]
+					currentCache = [row for row in self.getRawPart(partIndex)]
 					self.cache[partIndex] = currentCache
 					log("Part " + str(partIndex) + " cached.", self)
 
@@ -231,7 +244,6 @@ class TextEncoder:
 			vocDF = dict()
 			self.samplesCounts = [0] * len(self.parts)
 			for partIndex in range(len(self.parts)):
-				part = self.parts[partIndex]
 				data = self.getPart(partIndex, pad=False, encodeLabel=False, encode=False)
 				for tokens, label in data:
 					tokens = set(tokens)
@@ -312,6 +324,8 @@ class TextEncoder:
 		return self.docLength
 	def getSamplesCount(self, index):
 		return self.samplesCounts[index]
+	def getSamplesCounts(self):
+		return self.samplesCounts
 	def getEmbeddingsDimension(self):
 		return len(self.wordEmbeddings["the"])
 	def getEmbeddingMatrix(self):
@@ -324,6 +338,16 @@ class TextEncoder:
 			self.embeddingMatrix = embeddingMatrix
 		return self.embeddingMatrix
 
+	def getRawPart(self, *args, **kwargs):
+		if "doLower" not in kwargs:
+			kwargs["doLower"] = False
+		if "pad" not in kwargs:
+			kwargs["pad"] = False
+		if "encode" not in kwargs:
+			kwargs["encode"] = False
+		if "encodeLabel" not in kwargs:
+			kwargs["encodeLabel"] = False
+		return self.getPart(*args, **kwargs)
 
 	def getPart(self, index, *args, **encodeSampleKwargs):
 		files = self.parts[index]
@@ -339,6 +363,8 @@ class TextEncoder:
 			encodeSampleKwargs["truncating"] = self.truncating
 		if "docLength" not in encodeSampleKwargs:
 			encodeSampleKwargs["docLength"] = self.docLength
+		if "doLower" not in encodeSampleKwargs:
+			encodeSampleKwargs["doLower"] = self.doLower
 		encodeSampleKwargs["vocIndex"] = self.vocIndex
 		encodeSampleKwargs["wordEmbeddings"] = self.wordEmbeddings
 		encodeSampleKwargs["labelEncoder"] = self.labelEncoder

@@ -1,7 +1,7 @@
 
 import numpy as np
 
-MASK_TOKEN = "__M_A_S_K__"
-OOV_TOKEN = "__O_O_V__"
+MASK_TOKEN = "__m_a_s_k__"
+OOV_TOKEN = "__o_o_v__"
 MASK_EMBEDDING_FUNCTION = np.zeros
 OOV_EMBEDDING_FUNCTION = np.ones

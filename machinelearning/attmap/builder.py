@@ -8,6 +8,7 @@ from systemtools.location import *
 from systemtools.printer import *
 import copy
 from machinelearning.utils import *
+from machinelearning import config as mlConf
 
 
 class COLOR:
@@ -66,7 +67,7 @@ def buildToken(id, token, strengths=[1.0], colors=[COLOR.red, COLOR.green, COLOR
 
 
 
-def generateAttentionMap(sentences, attentions, *args, path=None, sentencesAmount=None, maxLetters=None, masks=[None, MASK_TOKEN], tmpDirName="attmap", **kwargs):
+def generateAttentionMap(sentences, attentions, *args, path=None, sentencesAmount=None, maxLetters=None, masks=[None, mlConf.MASK_TOKEN], tmpDirName="attmap", **kwargs):
 	if sentencesAmount is not None or maxLetters is not None:
 		raise Exception("Not yet implemented")
 	if not isinstance(masks, list):
