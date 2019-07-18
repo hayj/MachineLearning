@@ -41,13 +41,13 @@ def encodeSample\
 		newTokens = []
 		if encoding == "index":
 			encoder = vocIndex
-			mask = 0
-			oovElement = 1
-		else:
+		elif encoding == "embedding":
 			encoder = wordEmbeddings
-			mask = mlConf.MASK_EMBEDDING_FUNCTION(len(wordEmbeddings["the"]))
-			oovElement = mlConf.OOV_EMBEDDING_FUNCTION(len(wordEmbeddings["the"]))
+		else:
+			raise Exception("Unknown token encoding")
 		assert encoder is not None
+		mask = encoder[mlConf.MASK_TOKEN]
+		oovElement = encoder[mlConf.OOV_TOKEN]
 		for word in tokens:
 			if word in encoder:
 				newTokens.append(encoder[word])
@@ -56,7 +56,7 @@ def encodeSample\
 		tokens = np.array(newTokens)
 	else:
 		mask = mlConf.MASK_TOKEN
-	if pad:
+	if pad and docLength is not None:
 		wasArray = isinstance(tokens, np.ndarray)
 		tokens = padSequence(list(tokens), docLength, padding=padding, truncating=truncating, value=mask, removeEmptySentences=True)
 		if wasArray:
@@ -92,6 +92,9 @@ def encodeMulticlassLabels(labels, encoding='index', logger=None, verbose=True):
 
 
 class TextEncoder:
+	"""
+		This class encode text for machine learning libs. You must give a list of files and a generator function which have to yield (tokens, label). tokens must be non-lowered.
+	"""
 	def __init__\
 	(
 		self,
@@ -107,7 +110,6 @@ class TextEncoder:
 		split=[1.0], # [1.0], [0.8, 0.1, 0.1], [0.1] * 10
 		persist=None,
 
-		labelEncoder=None,
 		computeLabelEncoder=True,
 		labelEncoding='onehot', # onehot, index
 
@@ -116,14 +118,16 @@ class TextEncoder:
 
 		encoding="index", # index, embedding
 
-		wordEmbeddings=None,
-
-		vocIndex=None,
-		minVocDF=3,
-
-		batchSize=128,
+		prebuilt=None,
 
 		samplesCounts=None,
+		vocIndex=None,
+		labelEncoder=None,
+		wordEmbeddings=None,
+
+		minVocDF=2,
+
+		batchSize=128,
 
 		docLength=1200,
 
@@ -132,9 +136,31 @@ class TextEncoder:
 		logger=None,
 		verbose=True,
 	):
-		# We retain params:
+		"""
+			files can be a list of list of files.
+			O a list of files and you can set split as [0.8, 0.1, 0.1] for example to have train, val, test.
+			persist allow you to cache parts of your dataset, e.g. [False, True, True]
+		"""
+		# We store the logger:
 		self.logger = logger
 		self.verbose = verbose
+		# If check for prebuilt data:
+		if prebuilt is not None:
+			try:
+				if isinstance(prebuilt, str):
+					assert isFile(prebuilt)
+					prebuilt = deserialize(prebuilt)
+				if prebuilt["samplesCounts"] is not None:
+					samplesCounts = prebuilt["samplesCounts"]
+				if prebuilt["vocIndex"] is not None:
+					vocIndex = prebuilt["vocIndex"]
+				if prebuilt["labelEncoder"] is not None:
+					labelEncoder = prebuilt["labelEncoder"]
+				if prebuilt["wordEmbeddings"] is not None:
+					wordEmbeddings = prebuilt["wordEmbeddings"]
+			except Exception as e:
+				logException(e, self, message="Cannot parse prebuilt data")
+		# We retain params:
 		self.files = files
 		self.samplesGenerator = samplesGenerator
 		self.samplesGeneratorArgs = samplesGeneratorArgs
@@ -169,26 +195,40 @@ class TextEncoder:
 			self.doLower = not foundUpper
 		# We init a random object for split and other things:
 		self.rnd = random.Random(seed)
-		# We split files:
-		try:
-			self.rnd.shuffle(self.files)
-			if self.filesRatio is not None:
-				self.files = self.files[:int(len(self.files) * self.filesRatio)]
-			self.parts = []
-			if self.split is None:
-				self.split = [1.0]
-			if len(self.files) < len(self.split):
-				self.files = files[:len(self.split)]
-			assert len(set(self.files)) == len(self.files)
-			self.parts = ratioSplit(self.files, self.split)
-			assert len(set(flattenLists(self.parts))) == len(set(self.files))
-		except Exception as e:
-			logException(e, self)
-			message = "Cannot split files of length " + str(len(self.files))
-			message += " with the split schema " + str(self.split)
-			if self.filesRatio is not None:
-				message += " with files ratio to keep of " + str(self.filesRatio) + " which reduced files from " + str(len(files)) + " to " + str(len(self.files)) + " items"
-			raise Exception(message)
+		# We check if files are already splitted:
+		if isinstance(self.files[0], list):
+			self.split = []
+			newFiles = []
+			total = len(flattenLists(self.files))
+			for i in range(len(self.files)):
+				current = self.files[i]
+				self.split.append(truncateFloat(len(current) / total, 2))
+				if self.filesRatio is not None:
+					current = current[:int(len(current) * self.filesRatio)]
+				newFiles.append(current)
+			self.parts = newFiles
+			self.files = flattenLists(self.parts)
+		# Else we split files:
+		else:
+			try:
+				self.rnd.shuffle(self.files)
+				if self.filesRatio is not None:
+					self.files = self.files[:int(len(self.files) * self.filesRatio)]
+				self.parts = []
+				if self.split is None:
+					self.split = [1.0]
+				if len(self.files) < len(self.split):
+					self.files = files[:len(self.split)]
+				assert len(set(self.files)) == len(self.files)
+				self.parts = ratioSplit(self.files, self.split)
+				assert len(set(flattenLists(self.parts))) == len(set(self.files))
+			except Exception as e:
+				logException(e, self)
+				message = "Cannot split files of length " + str(len(self.files))
+				message += " with the split schema " + str(self.split)
+				if self.filesRatio is not None:
+					message += " with files ratio to keep of " + str(self.filesRatio) + " which reduced files from " + str(len(files)) + " to " + str(len(self.files)) + " items"
+				raise Exception(message)
 		# We handle the persistence:
 		self.cache = None
 		if self.persist is None:
@@ -199,6 +239,20 @@ class TextEncoder:
 		self.embeddingMatrix = None
 		# We show parts:
 		self.show()
+
+	def getPrebuilt(self):
+		prebuilt = dict()
+		prebuilt["samplesCounts"] = self.samplesCounts
+		prebuilt["vocIndex"] = self.vocIndex
+		prebuilt["labelEncoder"] = self.labelEncoder
+		prebuilt["wordEmbeddings"] = self.wordEmbeddings
+		return prebuilt
+
+	def serializePrebuilt(self, path):
+		if path[-7:] != ".pickle":
+			raise Exception("Please provide a .pickle file path")
+		prebuilt = self.getPrebuilt()
+		serialize(prebuilt, path)
 
 	def show(self):
 		message = "Dataset parts:\n"
@@ -293,22 +347,32 @@ class TextEncoder:
 			for word in sorted(list(voc)):
 				self.vocIndex[word] = i
 				i += 1
+			# For word embeddings, we add the mask and the out of vocabulary element:
+			self.wordEmbeddings[mlConf.MASK_TOKEN] = mlConf.MASK_EMBEDDING_FUNCTION(len(self.wordEmbeddings["the"]))
+			self.wordEmbeddings[mlConf.OOV_TOKEN] = mlConf.OOV_EMBEDDING_FUNCTION(len(self.wordEmbeddings["the"]))
 			# We add generate embedding for unknown words:
 			for w in self.vocIndex.keys():
 				if w not in self.wordEmbeddings:
 					self.wordEmbeddings[w] = np.random.normal(scale=0.6, size=(self.getEmbeddingsDimension(),))
 			# And finally we build the label encoder:
 			if self.computeLabelEncoder and self.labelEncoder is None:
-				labels = list(labels)
 				try:
-					labels = sorted(labels)
+					labels = sorted(list(set(labels)))
 				except: pass
-				encodedLabels = encodeMulticlassLabels(labels, encoding=self.labelEncoding, logger=self.logger, verbose=self.verbose)
+				(labels, encodedLabels) = encodeMulticlassLabels(labels, encoding=self.labelEncoding, logger=self.logger, verbose=self.verbose)
 				self.labelEncoder = dict()
 				assert len(encodedLabels) == len(labels)
 				for i in range(len(encodedLabels)):
 					self.labelEncoder[labels[i]] = encodedLabels[i]
 
+
+	def __getitem__(self, index):
+		return self.getPart(index)
+	def __len__(self):
+		return len(self.parts)
+
+	def getLabelEncoder(self):
+		return self.labelEncoder
 	def encodeLabel(self, label):
 		return self.labelEncoder[label]
 	def decodeLabel(self, enc):
