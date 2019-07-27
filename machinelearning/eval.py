@@ -137,7 +137,17 @@ def crossValidate\
 	return result
 
 
-if __name__ == '__main__':
+def test2():
+	from newssource.asattribution.asamin import getTFIDFSGDClassifier
+	from sklearn.naive_bayes import GaussianNB
+	from sklearn.linear_model import SGDClassifier
+	clf = getTFIDFSGDClassifier()
+	# clf = SGDClassifier()
+	# clf = GaussianNB()
+	print(crossValidate(clf, np.array([[0]] * 50 + [[1]] * 50), np.array([0] * 50 + [1] * 50), cv=5))
+
+
+def test1():
 	from sklearn import datasets, linear_model
 	from sklearn.metrics.scorer import make_scorer
 	from sklearn.metrics import confusion_matrix
@@ -146,5 +156,8 @@ if __name__ == '__main__':
 	X = diabetes.data[:150]
 	y = diabetes.target[:150]
 	lasso = linear_model.Lasso()
-	printLTS(crossValidate(lasso, X, y))
+	printLTS(crossValidate(lasso, X, y, cv=3))
+
+if __name__ == '__main__':
+	test2()
 

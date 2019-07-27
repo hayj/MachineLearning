@@ -282,10 +282,14 @@ def saveModel(model, directoryPath, kwargs=None, script=None,
     """
     assert isDir(directoryPath)
     if script is None:
-        fileToStr(os.path.realpath(__file__))
+        script = fileToStr(os.path.realpath(__file__))
     if kwargs is None:
         logWarning("You didn't provide kwargs", logger=logger, verbose=verbose)
-    json = model.to_json()
+    try:
+        json = model.to_json()
+    except Exception as e:
+        logException(e, logger, verbose=verbose, message="Cannot convert the model to json format")
+        json = None
     if makeSubDir:
         key = objectToHash((json, kwargs, script))
         name = "kerasmodel-" + key + "-" + getDateSec()
@@ -300,8 +304,9 @@ def saveModel(model, directoryPath, kwargs=None, script=None,
         log("We saved extraInfos.json", logger=logger, verbose=verbose)
     strToFile(script, directoryPath + "/script.py")
     log("We saved script.py", logger=logger, verbose=verbose)
-    strToFile(json, directoryPath + "/model.json")
-    log("We saved model.json", logger=logger, verbose=verbose)
+    if json is not None:
+        strToFile(json, directoryPath + "/model.json")
+        log("We saved model.json", logger=logger, verbose=verbose)
     try:
         plot_model(model, to_file=directoryPath + "/model.png")
         log("We saved model.png", logger=logger, verbose=verbose)
@@ -314,7 +319,81 @@ def saveModel(model, directoryPath, kwargs=None, script=None,
 
 
 
-def getAttentions(model, inputs, attToken="Attention"):
+def getAttentions(model, inputs, attToken="ttention", branch=None):
+    """
+        This function will return activation maps.
+        You give the original model, the function will take a part of it, from the input to the attention layer
+        You give inpus which are same inputs as training or validation data (no labels)
+        The function will return the activation map with the shape (<nb samples>, <length of each input>)
+        Then you can use the `attentions` with showAttentionMap from machinelearning.attmap.builder
+    """
+    if branch is not None:
+        model = Model(inputs=model.layers[branch].get_input_at(0), outputs=model.layers[branch].get_output_at(0))
+    # We get string representation of all layers:
+    layersStr = [str(l) for l in model.layers]
+    # We check that we have only one attention layer:
+    nbAttLayer = len([l for l in layersStr if attToken in l])
+    assert nbAttLayer == 1
+    # We get the index of the attention layer:
+    attIndex = -1
+    for i, l in enumerate(layersStr):
+        if attToken in l:
+            attIndex = i
+            break
+    assert attIndex > 0
+    # We build the attModel:
+    attModelLayers = model.layers[0:attIndex + 1]
+    attModel = Model(attModelLayers[0].input, attModelLayers[-1].get_output_at(0)) # attModelLayers[-1].output
+    # We predict attentions:
+    yAttn = attModel.predict(inputs)[1]
+    # We reshape all:
+    attentions = []
+    for i in range(len(inputs)):
+        currentAttention = yAttn[i]
+        activationMap = np.expand_dims(currentAttention, axis=1)
+        activationMap = [a[0] for a in activationMap]
+        attentions.append(activationMap)
+    # And finally we return the result:
+    return attentions
+
+def extractAttentionPart_deprecated(model, branchIndex=None, attToken="ttention"):
+    """
+        This function extract attention part of a given model (from the input to the attention layer).
+        If you have keras.engine.training.Model instances in your model, you must give the branchIndex
+        so that the function will unwind the inner model to find the attention layer.
+    """
+    import keras
+    # We get the input shape without the batch size part:
+    # See https://stackoverflow.com/a/43743706/3406616
+    inputShape = tuple(list(model.input_shape)[1:])
+    visible = Input(shape=inputShape)
+    current = visible
+    if branchIndex is not None:
+        for i in range(branchIndex):
+            if not isinstance(model.layers[i], keras.engine.input_layer.InputLayer) and \
+            not isinstance(model.layers[i], keras.engine.training.Model):
+                current = model.layers[i](current)
+        layers = model.layers[branchIndex].layers
+    else:
+        layers = model.layers
+    gotAttention = False
+    for layer in layers:
+        if isinstance(layer, keras.engine.training.Model):
+            raise Exception("Please choose the branch index to extract the attention part")
+        if not isinstance(layer, keras.engine.input_layer.InputLayer):
+            print(layer)
+            current = layer(current)
+            if attToken in str(layer):
+                gotAttention = True
+                # break
+    if not gotAttention or current is None:
+        raise Exception("We didn't found any attention layer")
+    # ouput = Dense(8)(current)
+    output = current
+    attPartModel = Model(inputs=visible, outputs=output)
+    return attPartModel
+
+def getAttentions_deprecated(model, inputs, attToken="ttention"):
     """
         This function will return activation maps.
         You give the original model, the function will take a part of it, from the input to the attention layer

@@ -19,6 +19,7 @@ def encodeSample\
 	docLength=None,
 	encode=True,
 	pad=True,
+	onlyTruncate=False,
 	padding='pre',
 	truncating='post',
 	encoding="index", # embedding # TODO
@@ -29,7 +30,13 @@ def encodeSample\
 ):
 	"""
 		This function encode an input (tokens, label)
+		pad will truncate and pad sequences
+		onlyTruncate will truncate sequences
+		you cannot pass pad=True and onlyTruncate=True
 	"""
+	if onlyTruncate:
+		assert docLength is not None
+		assert not pad
 	(tokens, label) = sample
 	if doLower and tokens is not None and len(tokens) > 0 and isinstance(tokens[0], str):
 		newTokens = []
@@ -61,6 +68,12 @@ def encodeSample\
 		tokens = padSequence(list(tokens), docLength, padding=padding, truncating=truncating, value=mask, removeEmptySentences=True)
 		if wasArray:
 			tokens = np.array(tokens)
+	elif onlyTruncate and docLength is not None:
+		if truncating == "post":
+			tokens = tokens[:docLength]
+		else:
+			tokens = tokens[:-docLength]
+		assert len(tokens) > 0 and len(tokens) <= docLength
 	if encodeLabel and labelEncoder is not None:
 		label = labelEncoder[label]
 	return (tokens, label)
@@ -186,13 +199,15 @@ class TextEncoder:
 			self.wordEmbeddings = Embeddings("test").getVectors()
 		self.wordEmbeddings = copy.copy(self.wordEmbeddings)
 		# We set doLower according to word embeddings:
+		foundUpper = False
+		for w in self.wordEmbeddings.keys():
+			if w != w.lower():
+				foundUpper = True
+				break
 		if self.doLower is None:
-			foundUpper = False
-			for w in self.wordEmbeddings.keys():
-				if w != w.lower():
-					foundUpper = True
-					break
 			self.doLower = not foundUpper
+		else:
+			assert self.doLower == (not foundUpper)
 		# We init a random object for split and other things:
 		self.rnd = random.Random(seed)
 		# We check if files are already splitted:
@@ -300,6 +315,10 @@ class TextEncoder:
 			for partIndex in range(len(self.parts)):
 				data = self.getPart(partIndex, pad=False, encodeLabel=False, encode=False)
 				for tokens, label in data:
+					if isinstance(tokens[0], list):
+						tokens = flattenLists(tokens)
+					# if len(tokens) > 1200:
+					# 	print(len(tokens))
 					tokens = set(tokens)
 					for token in tokens:
 						tokensCount += 1
@@ -413,7 +432,10 @@ class TextEncoder:
 			kwargs["encodeLabel"] = False
 		return self.getPart(*args, **kwargs)
 
-	def getPart(self, index, *args, **encodeSampleKwargs):
+	def getPart(self, index=None, *args, **encodeSampleKwargs):
+		if index is None:
+			assert len(self.parts) == 1
+			index = 0
 		files = self.parts[index]
 		if "logger" in encodeSampleKwargs:
 			del encodeSampleKwargs["logger"]
@@ -460,14 +482,20 @@ class TextEncoder:
 				verbose=self.verbose,
 			)
 
-	def getInfiniteBatcher(self, index, *args, skip=0, shuffle=0, **kwargs):
+	def getInfiniteBatcher(self, index=None, *args, skip=0, shuffle=0, **kwargs):
+		if index is None:
+			assert len(self.parts) == 1
+			index = 0
 		ci = self.getPart(index, *args, **kwargs)
 		return InfiniteBatcher(ci, batchSize=self.batchSize, 
 							shuffle=shuffle,
 							skip=skip,
 							logger=self.logger, verbose=self.verbose)
 
-	def getBatchesCount(self, index):
+	def getBatchesCount(self, index=None):
+		if index is None:
+			assert len(self.parts) == 1
+			index = 0
 		c = self.getSamplesCount(index)
 		return math.ceil(c / self.batchSize)
 

@@ -95,6 +95,7 @@ class ConsistentIterator:
         logger=None,
         verbose=True,
         parallelProcesses=cpuCount(),
+        maxParallelProcesses=18,
         queuesMaxSize=100000,
         subProcessesVerbose=False,
         seed=None,
@@ -113,6 +114,8 @@ class ConsistentIterator:
         self.logger = logger
         self.verbose = verbose
         self.parallelProcesses = parallelProcesses
+        if self.parallelProcesses > maxParallelProcesses:
+            self.parallelProcesses = maxParallelProcesses
         self.queuesMaxSize = queuesMaxSize
         self.subProcessesVerbose = subProcessesVerbose
         self.seed = seed

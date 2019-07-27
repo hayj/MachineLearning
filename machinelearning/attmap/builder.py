@@ -132,7 +132,6 @@ def buildAttentionHtml(tokens, attentions, *args, **kwargs):
 
 
 if __name__ == '__main__':
-	
 	tokens = [None, None, None, "the", "thing", "you", "can", "not", "understand", "."] * 10
 	attentions = [1.0, 1.0, 1.0, 0.0, 0.5, 0.1, 0.9, 0.2, 1.0, 0.0] * 10
 	# attentions = \

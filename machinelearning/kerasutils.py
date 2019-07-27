@@ -1,5 +1,4 @@
 from keras.utils import multi_gpu_model
-from keras import backend
 from systemtools.logger import *
 from numpy import array
 from keras.preprocessing.text import one_hot
@@ -27,6 +26,15 @@ from systemtools.logger import *
 from datatools.jsonutils import *
 from machinelearning.utils import *
 from machinelearning.iterator import *
+import numpy as np
+import matplotlib.pyplot as plt
+
+from keras import backend as K
+import tensorflow
+
+
+from sklearn.model_selection import KFold, StratifiedKFold
+import gc
 
 
 from keras.layers import LSTM, GRU, Dense, CuDNNLSTM, CuDNNGRU, Bidirectional
@@ -44,6 +52,7 @@ from keras import callbacks
 from keras.engine.topology import Layer
 from keras import initializers as initializers, regularizers, constraints
 from keras import backend as K
+
 
 
 
@@ -242,7 +251,6 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
             for key in self.epochs.keys():
                 if key.startswith("val"):
                     keys.append(key)
-            import matplotlib.pyplot as plt
             # We plot all:
             for key in keys:
                 try:
@@ -432,3 +440,211 @@ def hasToEarlyStop(histories, esm, logger=None, verbose=True):
     return doStop
 
 
+def estimateOptimalEpochs(model, x, y, patience=None,
+                          batchSize=128, patienceRatioToKeep=0.3,
+                          validationSplit=0.2,
+                          logger=None, verbose=True, maxEpochs=10000,
+                          kerasVerbose=False):
+    if patience is None:
+        patience = 10
+        logWarning("We will use the default patience " + str(patience), logger, verbose=verbose)
+    mainCallback = KerasCallback\
+    (
+        logger=logger,
+        verbose=False,
+        earlyStopMonitor=\
+        {
+            'val_loss': {'patience': patience},
+            'val_acc': {'patience': patience},
+        },
+    )
+    history = model.fit\
+    (
+        x, y,
+        validation_split=validationSplit,
+        epochs=maxEpochs,
+        batch_size=batchSize,
+        verbose=1 if kerasVerbose else 0,
+        callbacks=[mainCallback],
+    )
+    epochs = len(history.history[list(history.history.keys())[0]])
+    log("Total epochs: " + str(epochs), logger=logger, verbose=verbose)
+    epochs = (epochs - patience) + math.ceil(patienceRatioToKeep * patience)
+    log("Estimated optimal epochs: " + str(epochs), logger=logger, verbose=verbose)
+    return epochs, history
+
+def kerasCrossValidate(x, y, modelBuilder, labelEncoder=None, modelBuilderKwargs=None,
+                   patience=10, cv=10, batchSize=128, estimateOptimalEpochsKwargs=None,
+                   shuffle=True, randomState=0, logger=None, verbose=True, doPltShow=False,
+                   kerasVerbose=False,
+                   graphsDir=None,
+                   defaultOptimalEpochs=None,
+                   # tfBackend=None, clearTF=None,
+                   ):
+    """
+        modelBuilder is a function which must return a keras model.
+        modelBuilderKwargs are its parameters.
+    """
+    if patience <= 1:
+        logWarning("The patience is set to " + str(patience) + ", you should set it greater...", logger, verbose=verbose)
+    if modelBuilderKwargs is None:
+        modelBuilderKwargs = {}
+    if estimateOptimalEpochsKwargs is None:
+        estimateOptimalEpochsKwargs = {}
+    # We propagate estimateOptimalEpochsKwargs:
+    assert "patience" not in estimateOptimalEpochsKwargs
+    estimateOptimalEpochsKwargs["patience"] = patience
+    assert "batchSize" not in estimateOptimalEpochsKwargs
+    estimateOptimalEpochsKwargs["batchSize"] = batchSize
+    # We split data:
+    kfold = StratifiedKFold(n_splits=cv, shuffle=shuffle, random_state=randomState)
+    i = 0
+    cvScores = []
+    pbar = ProgressBar(cv, logger=logger, verbose=verbose)
+    if doPltShow or graphsDir is not None:
+        plt.figure()
+        plt.clf()
+    for trainIds, testIds in kfold.split(x, y):
+        # We get xTrain, yTrain, xTest and yTest:
+        log("Starting kfold " + str(i) + "...", logger, verbose=verbose)
+        xTrain = []
+        yTrain = []
+        for id in trainIds:
+            xTrain.append(x[id])
+            label = y[id]
+            if labelEncoder is not None:
+                label = labelEncoder[label]
+            yTrain.append(label)
+        xTrain = np.array(xTrain)
+        yTrain = np.array(yTrain)
+        xTest = []
+        yTest = []
+        for id in testIds:
+            xTest.append(x[id])
+            label = y[id]
+            if labelEncoder is not None:
+                label = labelEncoder[label]
+            yTest.append(label)
+        xTest = np.array(xTest)
+        yTest = np.array(yTest)
+        # We clean the tf session:
+        # if clearTF is not None:
+        #     clearTF()
+        # if tfBackend is not None:
+        #     log("Cleaning tf session...", logger, verbose=verbose)
+        #     tfBackend.clear_session()
+        optimalEpochs = None
+        if defaultOptimalEpochs is not None:
+            optimalEpochs = defaultOptimalEpochs
+        if optimalEpochs is None:
+            # logError("TODO corriger ici, faire 2 variable, une pour les params, une pour la boucle", logger)
+            # We get the model:
+            model = modelBuilder(**modelBuilderKwargs)
+            # We estimate the best amount of epochs:
+            optimalEpochs, history = estimateOptimalEpochs\
+            (
+                model,
+                xTrain,
+                yTrain,
+                logger=logger,
+                verbose=False,
+                kerasVerbose=kerasVerbose,
+                **estimateOptimalEpochsKwargs,
+            )
+            if doPltShow or graphsDir is not None:
+                plt.clf()
+                plt.plot(history.history['val_acc'])
+                plt.plot(history.history['acc'])
+                plt.title('Model accuracy')
+                plt.ylabel('Accuracy')
+                plt.xlabel('Epoch')
+                plt.legend(['Test', 'Train'], loc='upper left')
+            if graphsDir is not None:
+                plt.savefig(graphsDir + "/" + getDateSec() + ".png", format='png')
+            if doPltShow:
+                plt.show()
+            log("Optimal epochs is: " + str(optimalEpochs), logger, verbose=verbose)
+        # We clean the tf session:
+        # if clearTF is not None:
+        #     clearTF()
+        # if tfBackend is not None:
+        #     log("Cleaning tf session...", logger, verbose=verbose)
+        #     tfBackend.clear_session()
+        # We get a new model and train it on all data:
+        model = modelBuilder(**modelBuilderKwargs)
+        history = model.fit\
+        (
+            xTrain, yTrain,
+            epochs=optimalEpochs,
+            batch_size=batchSize,
+            verbose=1 if kerasVerbose else 0,
+        )
+        if doPltShow or graphsDir is not None:
+            plt.clf()
+            plt.plot(history.history['acc'])
+            plt.title('Model accuracy')
+            plt.ylabel('Accuracy')
+            plt.xlabel('Epoch')
+            plt.legend(['Train'], loc='upper left')
+        if graphsDir is not None:
+            plt.savefig(graphsDir + "/" + getDateSec() + ".png", format='png')
+        if doPltShow:
+            plt.show()
+        # We evaluate the model on the test set:
+        scores = model.evaluate(xTest, yTest, verbose=0)
+        # We get the acc:
+        accIndex = None
+        currentIndex = 0
+        for key in model.metrics_names:
+            if key == "acc":
+                accIndex = currentIndex
+                break
+            currentIndex += 1
+        # We clean the tf session:
+        # if clearTF is not None:
+        #     clearTF()
+        # if tfBackend is not None:
+        #     log("Cleaning tf session...", logger, verbose=verbose)
+        #     tfBackend.clear_session()
+        # We take the acc score:
+        score = scores[accIndex]
+        # We add the current fold score:
+        cvScores.append(score)
+        # We print end of the fold:
+        log("Fold " + str(i) + " done with score: " + str(score), logger, verbose=verbose)
+        # We inc the fold:
+        i += 1
+        pbar.tic("Cross-validation")
+    if doPltShow or graphsDir is not None:
+        plt.close()
+    cvScores = np.array(cvScores)
+    currentMean = cvScores.mean()
+    currentConfidence = cvScores.std() * 2
+    currentResult = {"accuracy": {"score": currentMean, "confidence": currentConfidence}}
+    return currentResult
+
+
+
+
+# Reset Keras Session
+def resetKeras():
+    # https://github.com/keras-team/keras/issues/12625
+    sess = K.tensorflow_backend.get_session()
+    K.tensorflow_backend.clear_session()
+    sess.close()
+    sess = K.tensorflow_backend.get_session()
+
+    try:
+        del model # this is from global space - change this as you need
+    except:
+        pass
+
+    gc.collect() # if it's done something you should see a number being outputted
+
+    # use the same config as you used to create the session
+    config = tensorflow.ConfigProto()
+    
+    # config.gpu_options.per_process_gpu_memory_fraction = 1 # deleted
+    # config.gpu_options.visible_device_list = "0" # deleted
+    
+    K.tensorflow_backend.set_session(tensorflow.Session(config=config))
