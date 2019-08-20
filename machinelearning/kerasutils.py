@@ -162,7 +162,8 @@ class KerasCallback(Callback): # https://github.com/keras-team/keras/blob/master
             self.saveModelOnEpochEnd = False
             logError("Please provide a modelsDir and an originalModel", self)
         if self.graphDir is None:
-            self.plotFiguresOnEpochEnd = False
+            # self.plotFiguresOnEpochEnd = False
+            self.graphDir =  tmpDir("kerasutils-graphs") + "/" + getDateSec()
             logError("Please provide a graph directory", self)
         self.initialEpoch = initialEpoch
         if self.historyFile is not None and isFile(self.historyFile):

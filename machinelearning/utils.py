@@ -23,7 +23,12 @@ def stackArrays(arrays):
             mtx = np.vstack((mtx, currentArray))
     return mtx
 
-
+def softmax2onehot(arr):
+    # return np.array([0.0 for e in range(index)] + [1.0] + [0.0 for e in range(index + 1, len(arr))])
+    index = np.argmax(arr)
+    result = np.zeros(len(arr))
+    result[index] = 1.0
+    return result
 
 def padSequences(ls, *args, **kwargs):
     return [padSequence(l, *args, **kwargs) for l in ls]

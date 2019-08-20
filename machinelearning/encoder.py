@@ -500,10 +500,6 @@ class TextEncoder:
 		return math.ceil(c / self.batchSize)
 
 
-
-
-
-
 if __name__ == '__main__':
 	files = sortedGlob(tmpDir("mbti-datasets") + "/*/*.bz2")[:5]
 	te = TextEncoder(files, split=[0.8, 0.1, 0.1])
