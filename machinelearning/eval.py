@@ -29,6 +29,7 @@ from systemtools.logger import *
 import numpy as np
 from sklearn.model_selection import cross_validate
 from sklearn.model_selection import KFold, StratifiedKFold
+from matplotlib import pyplot as plt # WARNING see below
 
 
 def crossValidate\
@@ -135,6 +136,90 @@ def crossValidate\
 			if isinstance(result[key], float):
 				result[key] = np.around(result[key], decimals=decimals)
 	return result
+
+
+
+
+def scikitLearnFit\
+(
+    clf,
+    xTrain, yTrain,
+    xVal, yVal,
+    patience=None, maxIter=1000,
+    scoreFunct=None,
+    figPath=None,
+    doFigShow=False,
+    doFigSave=True,
+    figShowInterval=None,
+    logger=None,
+    verbose=True,
+    doClearOutput=True,
+    stopFile=None,
+):
+    """
+        https://superuser.com/questions/557622/how-can-i-view-pictures-via-ssh
+    """
+    def __acc(clf, xVal, yVal):
+        rightPredictedCount = 0
+        for i, pred in enumerate(clf.predict(xVal)):
+            label = yVal[i]
+            if label == pred:
+                rightPredictedCount += 1
+        score = rightPredictedCount / len(yVal)
+        return score
+    if stopFile is None:
+        stopFile = tmpDir("stop-files")
+        stopFileName = "stop-" + getRandomStr()
+        stopFile += "/" + stopFileName
+        stopFileMessage = "Use this command to stop training:\n\ttouch ~/tmp/stop-files/" + stopFileName
+    else:
+        stopFileMessage = "Use this command to stop training:\n\ttouch " + stopFile
+    if doClearOutput:
+        from IPython.display import clear_output
+        if figShowInterval is None:
+            figShowInterval = 1
+    if patience is None:
+        patience = int(0.1 * maxIter)
+    if figShowInterval is None:
+        figShowInterval = int(0.01 * maxIter)
+    if scoreFunct is None:
+        scoreFunct = __acc
+    if figPath is None:
+        figPath = tmpDir("figures") + "/main.png"
+    classes = np.unique(np.array(list(yVal) + list(yTrain)))
+    epochs = []
+    scores = []
+    plt.figure()
+    lastBestScore = -100000000.0
+    epochsSinceLastBestScore = 0
+    for i in range(maxIter):
+        clf.partial_fit(xTrain, yTrain, classes=classes)
+        score = scoreFunct(clf, xVal, yVal)
+        scores.append(score)
+        epochs.append(i)
+        plt.clf()
+        if doClearOutput:
+            clear_output(wait=True)
+        log(stopFileMessage, logger=logger, verbose=verbose)
+        plt.plot(epochs, scores)
+        legend = ['Test']
+        plt.ylabel('Score')
+        plt.xlabel('Epoch')
+        plt.legend(legend, loc='upper left')
+        if doFigShow and i % figShowInterval == 0 and i >= 1:
+            plt.show()
+        plt.savefig(figPath, format='png')
+        if score > lastBestScore:
+            lastBestScore = score
+            epochsSinceLastBestScore = 0
+        else:
+            epochsSinceLastBestScore += 1
+        if epochsSinceLastBestScore > patience:
+            log("We early stop at epoch " + str(i) + ".", logger=logger, verbose=verbose)
+            break
+        if isFile(stopFile):
+            break
+    return scores
 
 
 def test2():
